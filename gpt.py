@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import util as u
 
 # ORIGINAL FILE FROM KARPATHY WITH SOME MODIFICATIONS
 # # hyperparameters
@@ -21,12 +22,12 @@ block_size = 8 # this is context size, represented by T
 max_iters = 5000
 eval_interval = 500
 learning_rate = 1e-3
+device = u.device_check()
 eval_iters = 200
 n_embd = 32
 n_head = 4
 n_layer = 3
 dropout = 0.2
-device = 'mps'
 
 torch.manual_seed(1337)
 
@@ -238,19 +239,4 @@ for iter in range(max_iters):
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
 more_text = decode(m.generate(context, max_new_tokens=500)[0].tolist())
 
-import util as u
-import os
-from datetime import datetime
-
-# if the output directory does not exist, create it
-if not os.path.exists(u.DEFAULT_DIR):
-    os.makedirs(u.DEFAULT_DIR)
-
-# get the current timestamp as a string in YYYY-MM-DD-HH-MM-SS format
-ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-print("Writing files with timestamp:", ts)
-u.write_text(more_text, f"orig-output_text-{ts}.txt")
-u.write_loss(mean_losses, f"orig-mean_loss-{ts}.json")
-u.plot_loss(f"orig-mean_loss-{ts}.json", f"orig-mean_loss-{ts}.png")
-print("Output:")
-print(more_text)
+u.write_outputs(mean_losses, more_text)

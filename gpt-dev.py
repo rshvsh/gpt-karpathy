@@ -3,17 +3,18 @@ import torch.nn as nn
 import torch.nn.functional as F
 import util as u
 
-# hyperparameters for running on my macbook pro
-batch_size = 32 # this is represented by B
-block_size = 8 # this is context size, represented by T
+# hyperparameters for running on my macbook pro, set big = False
+big = False
+batch_size = 32 if not big else 64        # this is represented by B
+block_size = 8  if not big else 256       # this is context size, represented by T
 max_iters = 5000
 eval_interval = 500
-learning_rate = 1e-3
+learning_rate = 1e-3 if not big else 3e-4
 device = u.device_check()
 eval_iters = 200
-n_embed = 32
-n_head = 4
-n_layer = 3
+n_embed = 32 if not big else 384          # this is represented by C
+n_head = 4 if not big else 6
+n_layer = 3 if not big else 6
 dropout = 0.2
 # ------------
 
