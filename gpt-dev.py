@@ -1,14 +1,15 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
+import util as u
 
-# hyperparameters
+# hyperparameters for running on my macbook pro
 batch_size = 32 # this is represented by B
 block_size = 8 # this is context size, represented by T
 max_iters = 5000
 eval_interval = 500
 learning_rate = 1e-3
+device = u.device_check()
 eval_iters = 200
 n_embed = 32
 n_head = 4
@@ -16,21 +17,7 @@ n_layer = 3
 dropout = 0.2
 # ------------
 
-# check for the device
-def device_check():
-    # Check for device support in priority order: CUDA > MPS > CPU
-    device = "cpu"
-    if torch.cuda.is_available():
-        device = torch.device("cuda")  # Use NVIDIA GPU
-    elif torch.backends.mps.is_available():
-        device = torch.device("mps")  # Use Apple Metal Performance Shaders
-
-    return device
-device = device_check()
-print(f"Using device: {device}")
-
-# seed for reproducibility
-torch.manual_seed(1337)
+torch.manual_seed(1337) # for reproducibility
 
 # !wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 with open('input.txt', 'r') as f:
@@ -50,11 +37,11 @@ data = torch.tensor(encode(text), dtype=torch.long) # encode
 # now split it 90/10
 n = int(0.9 * len(data))
 # NOTE: not sampling throught the data for splitting. Why?
-train_data, test_data = data[:n], data[n:]
+train_data, val_data = data[:n], data[n:]
 
 # get batches of data from training sets
 def get_batch(split):
-    data = train_data if split == 'train' else test_data
+    data = train_data if split == 'train' else val_data
     # generate a batch random indices one block shy of the end for x
     ix = torch.randint(len(data) - block_size, (batch_size,))      # get some indices
     x = torch.stack([data[i:i+block_size]for i in ix])             # pull some values
@@ -62,7 +49,7 @@ def get_batch(split):
     x, y = x.to(device), y.to(device)                              # move to device
     return x, y
 
-# estimate losses on completely different train and test samples
+# estimate losses on completely different train and val samples
 @torch.no_grad() # telling torch that we won't call .backward()
 def estimate_loss():
     out = {}
@@ -236,19 +223,5 @@ for  iter in range(max_iters):
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
 more_text = decode(model.generate(context, max_new_tokens=500)[0].tolist())
 
-import util as u
-import os
-from datetime import datetime
+u.write_outputs(mean_losses, more_text)
 
-# if the output directory does not exist, create it
-if not os.path.exists(u.DEFAULT_DIR):
-    os.makedirs(u.DEFAULT_DIR)
-
-# get the current timestamp as a string in YYYY-MM-DD-HH-MM-SS format
-ts = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
-print("Writing files with timestamp:", ts)
-u.write_text(more_text, f"output_text-{ts}.txt")
-u.write_loss(mean_losses, f"mean_loss-{ts}.json")
-u.plot_loss(f"mean_loss-{ts}.json", f"mean_loss-{ts}.png")
-print("Output:")
-print(more_text)
