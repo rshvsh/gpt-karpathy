@@ -235,8 +235,20 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
-# generate from the model
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-more_text = decode(m.generate(context, max_new_tokens=500)[0].tolist())
+# ------------
+# save the model at the current timestampa
+ts = u.get_ts() # timestap for outputs
+print("Writing files with timestamp:", ts)
 
-u.write_outputs(mean_losses, more_text)
+model_file = u.save_model(model, f"gpt_model-{ts}.gpt") # save model
+model = u.load_model(GPTLanguageModel().to(device), model_file)     # see if model loads
+
+# generate from the loaded model
+context = torch.zeros((1, 1), dtype=torch.long, device=device)
+more_text = decode(model.generate(context, max_new_tokens=500)[0].tolist())
+
+# write the outputs
+u.write_outputs(mean_losses, more_text, ts)
+print("Generated text:")
+print(more_text)
+# ------------

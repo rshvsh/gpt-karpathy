@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import util as u
+import sys
 
 # hyperparameters for running on my macbook pro, set big = False
-big = False
+big = True if (len(sys.argv) > 1 and sys.argv[1] == 'big') else False
 batch_size = 32 if not big else 64        # this is represented by B
 block_size = 8  if not big else 256       # this is context size, represented by T
 max_iters = 5000
@@ -220,9 +221,20 @@ for  iter in range(max_iters):
     loss.backward()           # backprop gradients
     optimizer.step()          # update the weights
 
-# generate from the model
+# ------------
+# save the model at the current timestampa
+ts = u.get_ts() # timestap for outputs
+print("Writing files with timestamp:", ts)
+
+model_file = u.save_model(model, f"gpt_model-{ts}.gpt") # save model
+model = u.load_model(GPT().to(device), model_file)     # see if model loads
+
+# generate from the loaded model
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
 more_text = decode(model.generate(context, max_new_tokens=500)[0].tolist())
 
-u.write_outputs(mean_losses, more_text)
-
+# write the outputs
+u.write_outputs(mean_losses, more_text, ts)
+print("Generated text:")
+print(more_text)
+# ------------
