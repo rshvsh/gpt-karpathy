@@ -60,6 +60,7 @@ def get_ts():
     return datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
 def save_model(model, fname):
+    create_output_dir()
     fname = DEFAULT_DIR + "/" + fname
     torch.save(model.state_dict(), fname)
     return fname
