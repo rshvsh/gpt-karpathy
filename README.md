@@ -23,7 +23,7 @@ ssh-keygen -lf <(ssh-keyscan -p 31183 HOSTNAME)
 ssh ubuntu@$HOSTNAME -p $PORTNUM
 ```
 
-## Download the code
+## Download the code on the remote machine
 
 ```bash
 export GITHUB_TOKEN="github token"
@@ -39,14 +39,14 @@ sudo apt install -y python3-pip
 pip install -r requirements.txt
 ```
 
-## Run you stuff
+## Run you stuff on the remote machine
 
 ```bash
 # use big to train the big model, otherwise just leave out big
 python3 ./gpt.py big 
 ```
 
-## Download files
+## Download files onto your local machine
 
 ```bash
 # for a particular timestamp
