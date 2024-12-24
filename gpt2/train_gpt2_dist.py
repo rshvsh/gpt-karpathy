@@ -6,7 +6,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
-from contextlib import nullcontext
 
 # -----------------------------------------------------------------------------
 
@@ -278,7 +277,8 @@ else:
     print(f"using device: {device}")
 
 torch.manual_seed(1337)
-torch.cuda.manual_seed(1337) if torch.cuda.is_available() else (torch.mps.manual_seed(1337) if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else None)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
 
 total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
 B = 16 # micro batch size
@@ -296,7 +296,7 @@ torch.set_float32_matmul_precision('high')
 # create model
 model = GPT(GPTConfig(vocab_size=50304))
 model.to(device)
-model = torch.compile(model) if device == "cuda" else model
+model = torch.compile(model)
 if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 raw_model = model.module if ddp else model # always contains the "raw" unwrapped model
@@ -328,7 +328,7 @@ for step in range(max_steps):
     for micro_step in range(grad_accum_steps):
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
-        with torch.autocast(device_type=device, dtype=torch.bfloat16) if device == "cuda" else nullcontext():
+        with torch.autocast(device_type=device, dtype=torch.bfloat16):
             logits, loss = model(x, y)
         # we have to scale the loss to account for gradient accumulation,
         # because the gradients just add on each successive backward().
@@ -347,7 +347,7 @@ for step in range(max_steps):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
     optimizer.step()
-    torch.cuda.synchronize() if device == "cuda" else (torch.mps.synchronize() if device == "mps" else None)
+    torch.cuda.synchronize() # wait for the GPU to finish work
     t1 = time.time()
     dt = t1 - t0 # time difference in seconds
     tokens_processed = train_loader.B * train_loader.T * grad_accum_steps * ddp_world_size
@@ -372,7 +372,7 @@ x = tokens.to(device)
 # generate! right now x is (B, T) where B = 5, T = 8
 # set the seed to 42
 torch.manual_seed(42)
-torch.cuda.manual_seed(42) if torch.cuda.is_available() else (torch.mps.manual_seed(42) if hasattr(torch.backends, "mps") and torch.backends.mps.is_available() else None)
+torch.cuda.manual_seed(42)
 while x.size(1) < max_length:
     # forward the model to get the logits
     with torch.no_grad():
