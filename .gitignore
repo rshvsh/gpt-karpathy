@@ -2,4 +2,9 @@ __pycache__
 old
 output
 tmp.txt
+tmp.py
 .DS_Store
+data_ag_news
+edu_fineweb10B
+log
+
