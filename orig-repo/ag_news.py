@@ -69,7 +69,7 @@ def main():
         # write any remaining tokens as the last shard
         if token_count != 0:
             split = "val" if shard_index == 0 else "train"
-            filename = os.path.join(DATA_CACHE_DIR, f"edufineweb_{split}_{shard_index:06d}")
+            filename = os.path.join(DATA_CACHE_DIR, f"ag_news_{split}_{shard_index:06d}")
             write_datafile(filename, all_tokens_np[:token_count])
 
 # needed to get multi-processing to work on MacBook Pro
