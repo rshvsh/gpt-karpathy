@@ -322,8 +322,10 @@ if torch.cuda.is_available():
 
 enc = tiktoken.get_encoding("gpt2")
 
-total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
-B = 64 # micro batch size
+##### total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
+total_batch_size = 65536
+##### B = 64 # micro batch size
+B = 16 # micro batch size
 T = 1024 # sequence length
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
@@ -411,8 +413,8 @@ for step in range(max_steps):
                 # rng seeds etc., if you wanted to more exactly resume training
                 torch.save(checkpoint, checkpoint_path)
 
-    # once in a while evaluate hellaswag
-    if (step % 250 == 0 or last_step) and (not use_compile):
+    # once in a while evaluate hellaswag ##### disabled for now while trying out small dataset
+    if False and (step % 250 == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
         for i, example in enumerate(iterate_examples("val")):
@@ -449,7 +451,8 @@ for step in range(max_steps):
         model.eval()
         num_return_sequences = 4
         max_length = 32
-        tokens = enc.encode("Hello, I'm a language model,")
+        # tokens = enc.encode("Hello, I'm a language model,")
+        tokens = enc.encode("Hello, in breaking news today,")
         tokens = torch.tensor(tokens, dtype=torch.long)
         tokens = tokens.unsqueeze(0).repeat(num_return_sequences, 1)
         xgen = tokens.to(device)
