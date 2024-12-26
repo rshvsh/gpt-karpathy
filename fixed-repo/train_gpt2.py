@@ -24,7 +24,7 @@ class CausalSelfAttention(nn.Module):
         # regularization
         self.n_head = config.n_head
         self.n_embd = config.n_embd
-        
+
     def forward(self, x):
         B, T, C = x.size() # batch size(B), sequence length(T), embedding_dimensionality(n_embd)
         qkv = self.c_attn(x)
@@ -188,7 +188,7 @@ class GPT(nn.Module):
         decay_params = [p for _, p in param_dict.items() if p.dim() >= 2]
         nodecay_params = [p for _, p in param_dict.items() if p.dim() < 2]
         optim_groups = [
-            {'params': decay_params, 'weight_dacay': weight_decay},
+            {'params': decay_params, 'weight_decay': weight_decay},
             {'params': nodecay_params, 'weight_decay': 0.0}
 
         ]
@@ -281,7 +281,7 @@ class DataLoader:
                 self.tokens = self.load_shard(self.shards[self.current_shard])
                 self.current_position = B * T * self.process_rank
         return x, y
-    
+
 
 # -----------------------------------------------------------------------------
 # helper function for HellaSwag eval
@@ -364,14 +364,14 @@ if __name__ == "__main__":
     # gradient accumulation configuration
     total_batch_size = 524_288 # 2**19 ~0.5M, in number of tokens
     B = 64 # Micro-batch size (make as big as GPU can handle)
-    T = 1024 # Senquence length
+    T = 1024 # sequence length
     assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
     grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
     if master_process:
         print(f"total desired batch size {total_batch_size}")
         print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
-    
-    
+
+
     # load batches of data
     train_loader = DataLoader(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="train")
     val_loader = DataLoader(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="val")
@@ -488,8 +488,7 @@ if __name__ == "__main__":
                         'config': raw_model.config,
                         'step': step,
                         'val_loss': val_loss_accum.item(),
-                        'train_loader': train_loader_checkpoint,
-            
+                        'train_loader': train_loader_checkpoint,            
                     }
                     torch.save(checkpoint, checkpoint_path)
 
@@ -559,7 +558,7 @@ if __name__ == "__main__":
         tokens_processed = train_loader.B * train_loader.T * grad_accum_steps * ddp_world_size
         tokens_per_sec = tokens_processed / dt
         if master_process:
-            print(f"step: {step:5d} | loss: {loss_accum.item():.6} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
+            print(f"step: {step:5d} | loss: {loss_accum.item():.6f} | lr: {lr:.4e} | norm: {norm:.4f} | dt: {dt*1000:.2f}ms | tok/sec: {tokens_per_sec:.2f}")
             with open(log_file, "a") as f:
                 f.write(f"{step} train {loss_accum.item():.6f}\n")
 
