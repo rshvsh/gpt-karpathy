@@ -2,11 +2,24 @@
 
 ## `ssh` to the remote machine
 
-You should create the rsa key per the lambda instructions.
+You should create the rsa key `id_rsa_lambda` per the lambda instructions.
 
 ```bash
 ssh -i ~/.ssh/id_rsa_lambda <ip addr>
 ```
+
+Edit your `~/.ssh/config` file and edit the section for the new host with the new IP adress:
+
+```bash
+Host <ip addr>
+  HostName <ip addr>
+  IdentityFile ~/.ssh/id_rsa_lambda
+  User ubuntu
+```
+
+You should cleanup when you finish and shutdown the machine:
+- Edit your `~/.ssh/known_hosts` file and delete the entries with the `<ip addr>`
+- There should be three entries, one each with `ssh-ed25519`, `ssh-rsa` and `ecdsa-sha2-nistp256`
 
 ## Install pyenv
 
@@ -24,9 +37,9 @@ curl https://pyenv.run | bash
 ## Add enviornment variables to `~/.bashrc` and activate the environment
 
 ```bash
-export PYENV_ROOT="$HOME/.pyenv"
-[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init - bash)"
+echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
+echo '[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"' >> ~/.bashrc
+echo 'eval "$(pyenv init - bash)"' >> ~/.bashrc
 
 source ~/.bashrc
 
@@ -37,6 +50,8 @@ pyenv global 3.11.11
 pyenv virtualenv 3.11.11 myenv
 
 pyenv activate myenv
+
+pip install --upgrade pip
 
 pip install -r requirements.txt
 ```
