@@ -1,3 +1,79 @@
+# Running on Lambda
+
+## `ssh` to the remote machine
+
+You should create the rsa key per the lambda instructions.
+
+```bash
+ssh -i ~/.ssh/id_rsa_lambda <ip addr>
+```
+
+## Install pyenv
+
+```bash
+sudo apt update
+
+sudo apt install -y make build-essential libssl-dev zlib1g-dev \
+libbz2-dev libreadline-dev libsqlite3-dev wget curl llvm \
+libncurses5-dev libncursesw5-dev xz-utils tk-dev \
+libffi-dev liblzma-dev python3-openssl git
+
+curl https://pyenv.run | bash
+```
+
+## Add enviornment variables to `~/.bashrc` and activate the environment
+
+```bash
+export PYENV_ROOT="$HOME/.pyenv"
+[[ -d $PYENV_ROOT/bin ]] && export PATH="$PYENV_ROOT/bin:$PATH"
+eval "$(pyenv init - bash)"
+
+source ~/.bashrc
+
+pyenv install 3.11.11
+
+pyenv global 3.11.11
+
+pyenv virtualenv 3.11.11 myenv
+
+pyenv activate myenv
+
+pip install -r requirements.txt
+```
+
+## Export the GitHub token and clone the repo
+
+```bash
+export GITHUB_TOKEN="<your github token>"
+
+git clone https://github.com/rshvsh/gpt-karpathy.git
+```
+
+# Configuring S3 access with `rclone`
+
+- Install rclone `sudo apt install rclone`
+- Set `RCLONE_S3_ACCESS_KEY_ID` and `RCLONE_S3_SECRET_ACCESS_KEY` to point to your s3 credentials
+- Create or edit your `~/.config/rclone/rclone.conf` to access your s3 account by adding the following section
+
+```bash
+[fes3]
+type = s3
+provider = AWS
+region = us-west-2
+location_constraint = us-west-2
+acl = private
+bucket_acl = private
+```
+
+Common rclone commands:
+
+```bash
+rclone ls fes3:bucket-name
+rclone mkdir fes3:bucket-name
+rclone copy /path/to/local/file.txt feS3:bucket-name
+rclone sync /local/path fes3:karpathy.video --create-empty-src-dirs --progress
+```
+
 # Running on Hyperbolic
 
 Before initiating an instance, be sure to setup your account with a public key. This is only needed one time for your account.
