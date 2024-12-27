@@ -61,8 +61,17 @@ pip install -r requirements.txt
 ```bash
 export GITHUB_TOKEN="<your github token>"
 
+git config --global user.email "you@example.com"
+git config --global user.name "Your Name"
+
 git clone https://github.com/rshvsh/gpt-karpathy.git
 ```
+
+# Configure VS Code
+
+- Use thge Remote-SSH extension to connect to the remote host at <ip address>
+- Install the python extention from Microsoft (seems like it needs to install something on the server)
+- Once the virtual environment is created and activated, Cmd+Shift+P and search for Python: Select Interpreter and choose the venv
 
 # Configuring S3 access with `rclone`
 

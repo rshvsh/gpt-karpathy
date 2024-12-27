@@ -3,3 +3,4 @@ matplotlib==3.9.2
 datasets==3.2.0
 transformers==4.47.1
 tiktoken==0.8.0
+datasets==3.2.0
