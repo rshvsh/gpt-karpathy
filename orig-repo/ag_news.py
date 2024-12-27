@@ -7,7 +7,7 @@ from tqdm import tqdm # pip install tqdm
 import numpy as np
 
 local_dir = "data_ag_news"
-shard_size = int(1e5) # 
+shard_size = int(1e5) # 1e8 for fineweb
 
 # create the cache the local directory if it doesn't exist yet
 DATA_CACHE_DIR = os.path.join(os.path.dirname(__file__), local_dir)
@@ -70,8 +70,11 @@ def main():
         if token_count != 0:
             split = "val" if shard_index == 0 else "train"
             filename = os.path.join(DATA_CACHE_DIR, f"ag_news_{split}_{shard_index:06d}")
+            print(f"Writing last shard {filename} with {token_count} tokens")
             write_datafile(filename, all_tokens_np[:token_count])
 
 # needed to get multi-processing to work on MacBook Pro
 if __name__ == '__main__':
+    # there are 62 full shards with 100k tokens and one with ~73k tokens
+    # => total of 6.2M + 73k = 6.273M tokens
     main()

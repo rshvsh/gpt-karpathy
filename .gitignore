@@ -4,7 +4,8 @@ output
 tmp.txt
 tmp.py
 .DS_Store
-data_ag_news
+data_ag_news/
 edu_fineweb10B
 log
+hellaswag/
 
