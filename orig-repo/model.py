@@ -66,11 +66,13 @@ class Block(nn.Module):
 
 @dataclass
 class GPTConfig:
-    block_size: int = 1024 # max sequence length
-    vocab_size: int = 50257 # number of tokens: 50,000 BPE merges + 256 bytes tokens + 1 <|endoftext|> token
-    n_layer: int = 12 # number of layers
-    n_head: int = 12 # number of heads
-    n_embd: int = 768 # embedding dimension
+
+    def __init__(self, args):
+        self.block_size: int = args.gpt_block_size # 1024 max sequence length
+        self.vocab_size: int = args.gpt_vocab_size # 50257 number of tokens: 50,000 BPE merges + 256 bytes tokens + 1 <|endoftext|> token
+        self.n_layer: int = args.num_layers # 12 number of layers
+        self.n_head: int = args.num_heads # 12 number of heads
+        self.n_embd: int = args.num_embds # 768 embedding dimension
 
 class GPT(nn.Module):
 
@@ -172,7 +174,7 @@ class GPT(nn.Module):
 
         return model
 
-    def configure_optimizers(self, weight_decay, learning_rate, device_type):
+    def configure_optimizers(self, weight_decay, learning_rate, device_type, master_process):
         # start with all of the candidate parameters (that require grad)
         param_dict = {pn: p for pn, p in self.named_parameters()}
         param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}

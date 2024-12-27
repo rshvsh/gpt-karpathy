@@ -80,7 +80,7 @@ git clone https://github.com/rshvsh/gpt-karpathy.git
 - Create or edit your `~/.config/rclone/rclone.conf` to access your s3 account by adding the following section
 
 ```bash
-[fes3]
+[s3-name]
 type = s3
 provider = AWS
 region = us-west-2
@@ -92,11 +92,22 @@ bucket_acl = private
 Common rclone commands:
 
 ```bash
-rclone ls fes3:bucket-name
-rclone mkdir fes3:bucket-name
-rclone copy /path/to/local/file.txt feS3:bucket-name
-rclone sync /local/path fes3:karpathy.video --create-empty-src-dirs --progress
+rclone ls s3-name:bucket-name
+rclone mkdir s3-name:bucket-name
+rclone copy /path/to/local/file.txt s3-name:bucket-name
+rclone sync /local/path s3-name:bucket-path-name --create-empty-src-dirs --progress
 ```
+
+Note: be sure to fully qualify paths when using rclone. For example:
+
+```bash
+# this will create localdir s3, otherwise files will be copied to bucket-name directly
+rclone copy /path/to/localdir s3-name:bucket-name/localdir
+
+# this will create localdir on the local machine, otherwise files in localdir will be copied to /path/to
+rclone copy s3-name:bucket-name/localdir /path/to/localdir 
+```
+
 
 # Running on Hyperbolic
 

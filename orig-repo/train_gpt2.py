@@ -6,6 +6,7 @@ import torch
 from torch.nn import functional as F
 from hellaswag import render_example, iterate_examples
 from model import GPT, GPTConfig
+from args import parse_args
 
 # -----------------------------------------------------------------------------
 
@@ -27,7 +28,7 @@ class DataLoaderLite:
         assert split in {'train', 'val'}
 
         # get the shard filenames
-        data_root = "data_ag_news" ### "edu_fineweb10B"
+        data_root = args.dataset # "edu_fineweb10B"
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
         shards = sorted(shards)
@@ -92,6 +93,11 @@ from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 
+args = parse_args()
+max_arg_length = max(len(arg) for arg in vars(args).keys())
+for arg, value in vars(args).items():
+    print(f"{arg:<{max_arg_length}}: {value}")
+
 # set up DDP (distributed data parallel).
 # torchrun command sets the env variables RANK, LOCAL_RANK, and WORLD_SIZE
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
@@ -129,8 +135,8 @@ if torch.cuda.is_available():
 enc = tiktoken.get_encoding("gpt2")
 
 total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
-B = 64 # micro batch size
-T = 1024 # sequence length
+B = args.micro_batch_size # micro batch size # original was 64... needed to reduce due to CUDA out of memory
+T = args.sequence_length # 1024 sequence length
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
 if master_process:
@@ -143,7 +149,9 @@ val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_w
 torch.set_float32_matmul_precision('high')
 
 # create model
-model = GPT(GPTConfig(vocab_size=50304))
+gpt_config = GPTConfig(args) # instantiate from the arguments
+gpt_config.vocab_size = args.train_vocab_size # for training, override the gpt vocab size to be a good multiple of 2
+model = GPT(gpt_config)
 # model = GPT.from_pretrained("gpt2") # or init from OpenAI GPT-2
 model.to(device)
 use_compile = False # torch.compile interferes with HellaSwag eval and Generation. TODO fix
@@ -153,11 +161,11 @@ if ddp:
     model = DDP(model, device_ids=[ddp_local_rank])
 raw_model = model.module if ddp else model # always contains the "raw" unwrapped model
 
-weight_decay = 0.1
+weight_decay = args.weight_decay
 max_lr = 6e-4
-min_lr = max_lr * 0.1
-warmup_steps = 715
-max_steps = 19073 # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
+min_lr = max_lr * weight_decay
+warmup_steps = args.warmup_steps
+max_steps = args.max_steps # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 def get_lr(it):
     # 1) linear warmup for warmup_iters steps
     if it < warmup_steps:
@@ -172,7 +180,7 @@ def get_lr(it):
     return min_lr + coeff * (max_lr - min_lr)
 
 # optimize!
-optimizer = raw_model.configure_optimizers(weight_decay=weight_decay, learning_rate=max_lr, device_type=device_type)
+optimizer = raw_model.configure_optimizers(weight_decay=weight_decay, learning_rate=max_lr, device_type=device_type, master_process=master_process)
 
 # create the log directory we will write checkpoints to and log to
 log_dir = "log"
@@ -186,7 +194,7 @@ for step in range(max_steps):
     last_step = (step == max_steps - 1)
 
     # once in a while evaluate our validation loss
-    if step % 250 == 0 or last_step:
+    if step % args.val_loss_freq == 0 or last_step:
         model.eval()
         val_loader.reset()
         with torch.no_grad():
@@ -197,8 +205,9 @@ for step in range(max_steps):
                 x, y = x.to(device), y.to(device)
                 with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
                     logits, loss = model(x, y)
-                loss = loss / val_loss_steps
+                ##### removed loss = loss / val_loss_steps
                 val_loss_accum += loss.detach()
+            val_loss_accum /= val_loss_steps # diff from Andrej - less prone to floating point errors: https://github.com/karpathy/build-nanogpt/pull/19/files
         if ddp:
             dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
         if master_process:
@@ -219,7 +228,7 @@ for step in range(max_steps):
                 torch.save(checkpoint, checkpoint_path)
 
     # once in a while evaluate hellaswag
-    if False and (step % 250 == 0 or last_step) and (not use_compile):
+    if args.hellaswag_freq > 0 and (step % args.hellaswag_freq == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
         for i, example in enumerate(iterate_examples("val")):
@@ -252,7 +261,7 @@ for step in range(max_steps):
                 f.write(f"{step} hella {acc_norm:.4f}\n")
 
     # once in a while generate from the model (except step 0, which is noise)
-    if ((step > 0 and step % 250 == 0) or last_step) and (not use_compile):
+    if ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):
         model.eval()
         num_return_sequences = 4
         max_length = 32
@@ -285,6 +294,11 @@ for step in range(max_steps):
         for i in range(num_return_sequences):
             tokens = xgen[i, :max_length].tolist()
             decoded = enc.decode(tokens)
+
+            # Check for the '<|endoftext|>' token and truncate the text
+            end_token = "<|endoftext|>"
+            if end_token in decoded:
+                decoded = decoded.split(end_token)[0]  # Only keep the text before the token
             print(f"rank {ddp_rank} sample {i}: {decoded}")
 
     # do one step of the optimization
@@ -327,3 +341,6 @@ for step in range(max_steps):
 
 if ddp:
     destroy_process_group()
+
+# here is a sample commandline: with args
+# torchrun --standalone --nproc_per_node=1 train_gpt2.py --micro-batch-size=16 --val-loss-freq=5 --hellaswag-freq=-1 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=5
