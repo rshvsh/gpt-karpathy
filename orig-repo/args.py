@@ -24,6 +24,7 @@ def parse_args():
     parser.add_argument("--val-loss-freq", type=int, default=25, help="How often to calculate validation loss")
     parser.add_argument("--hellaswag-freq", type=int, default=250, help="How often to evaluate hellaswag")
     parser.add_argument("--generate-freq", type=int, default=250, help="How often to generate text")
+    parser.add_argument("--checkpoint-freq", type=int, default=5000, help="How often to checkpoint the model")
 
     args = parser.parse_args()
     return args
@@ -51,3 +52,4 @@ if __name__ == "__main__":
     print(f"Val loss frequency {args.val_loss_freq}")
     print(f"Hellaswag frequency {args.hellaswag_freq}")
     print(f"Text generation frequency {args.generate_freq}")
+    print(f"Model checkpoint frequency {args.checkpoint_freq}")
