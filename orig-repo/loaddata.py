@@ -1,4 +1,3 @@
-import tiktoken
 import numpy as np
 import os
 import torch
@@ -10,7 +9,7 @@ def load_tokens(filename):
     return ptt
 
 class DataLoaderLite:
-    def __init__(self, B, T, process_rank, num_processes, split, args, master_process):
+    def __init__(self, B, T, process_rank, num_processes, split, dataset, master_process):
         self.B = B
         self.T = T
         self.process_rank = process_rank
@@ -18,7 +17,7 @@ class DataLoaderLite:
         assert split in {'train', 'val'}
 
         # get the shard filenames
-        data_root = args.dataset # "edu_fineweb10B"
+        data_root = dataset # "edu_fineweb10B"
         shards = os.listdir(data_root)
         shards = [s for s in shards if split in s]
         shards = sorted(shards)
@@ -48,3 +47,109 @@ class DataLoaderLite:
             self.tokens = load_tokens(self.shards[self.current_shard])
             self.current_position = B * T * self.process_rank
         return x, y
+
+# we actually want to pick the shards randomly without replacement
+# then within the shard, we want to pick the micro-batches randomly without replacement
+import random
+class DataLoaderRandom:
+    def __init__(self, B, T, process_rank, ddp_world_size, split, dataset, master_process):
+        print(f"DataLoaderRandom for {split}")
+        self.B = B
+        self.T = T
+        self.process_rank = process_rank
+        self.num_processes = ddp_world_size
+        self.split = split
+        assert split in {'train', 'val'}
+
+        # get the shard filenames
+        data_root = dataset
+        shards = os.listdir(data_root)
+        shards = [s for s in shards if split in s]
+        shards = sorted(shards)
+        shards = [os.path.join(data_root, s) for s in shards]
+        random.seed(1957) # the seed is important so that all processes pick the same shards
+        random.shuffle(shards)
+        self.shards = shards
+        assert len(shards) > 0, f"no shards found for split {split}"
+        print(f"Found {len(shards)} shards for split {split}")
+
+        # this is the size of the batch being pulled
+        self.dataloader_batch_size = B * T * ddp_world_size
+        print(f"Total data loader batch size: {self.dataloader_batch_size:_} for process rank {process_rank}")
+        
+        self.reset()
+
+    # reset with current_shard_index = 0 means starting a new epoch
+    def reset(self, current_shard_index=0):
+        self.current_shard_index = current_shard_index # start at shard index zero
+        self.current_batch_index = 0 # keeps track of the batch index within the current shard
+        self.batches = [] # list of batch indices to pull from the current shard
+
+        # load tokens for the shard
+        self.tokens = load_tokens(self.shards[self.current_shard_index])
+        num_tokens = len(self.tokens)
+        num_batches = (num_tokens - 1) // self.dataloader_batch_size # added the -1 so that we have an extra token for the last batch
+
+        print(f"Split {self.split}: Reset: shard index {self.current_shard_index}:{self.shards[self.current_shard_index]} has {num_tokens:_} tokens and {num_batches:_} batches")
+        if num_batches == 0:
+            # this shard is too small, skip it and go to the next one
+            print(f"Split {self.split}: Shard is too small, skipping shard index {self.current_shard_index}:{self.shards[self.current_shard_index]}")
+            next_shard_index = 0 if self.current_shard_index + 1 >= len(self.shards) else self.current_shard_index + 1            
+            # TODO:~ at some point check for infinite loop here, but for now we assume there is always a valid shard
+            self.reset(next_shard_index)
+            return
+
+        self.batches = list(range(num_batches))
+
+        random.seed(1957) # the seed is important so that all processes pick from the same batches
+        random.shuffle(self.batches)
+
+    def next_batch(self):
+        B, T = self.B, self.T
+        start_position = B * T * self.num_processes * self.current_batch_index + self.process_rank 
+        buf = self.tokens[start_position : start_position+B*T+1]
+        x = (buf[:-1]).view(B, T) # inputs
+        y = (buf[1:]).view(B, T) # targets
+
+        self.current_batch_index += 1 # advance the batch index for this process
+        if self.current_batch_index >= len(self.batches):
+            # we need to advance to the next shard
+            self.current_shard_index += 1
+            if self.current_shard_index >= len(self.shards):
+                # we are out of shards, reset to the beginning
+                print(f"Split {self.split}: Shard index {self.current_shard_index}: Resetting the first shard index, we've gone through one epoch")
+                self.reset()
+            else:
+                # load tokens for the next shard
+                self.reset(self.current_shard_index)
+                self.tokens = load_tokens(self.shards[self.current_shard_index])
+
+        return x, y
+
+if __name__ == "__main__":
+    from args import parse_args
+    args = parse_args()
+    print("micro batch size:", args.micro_batch_size)
+    print("sequence length:", args.sequence_length)
+    world_size = 1
+    process_num = 0
+    num_shards = 63
+    shard_len = 100_000 # tokens
+    num_batches_per_shard = shard_len // (args.micro_batch_size * args.sequence_length * world_size)
+    iters = num_shards * num_batches_per_shard + 10
+
+    dl = DataLoaderRandom(args.micro_batch_size, args.sequence_length, process_num, world_size, "val", args.dataset, True)
+    print(f"Running {iters} iterations")
+    for i in range(iters):
+        print(i, dl.current_shard_index, dl.current_batch_index)
+        x, y = dl.next_batch()
+
+    # This checks for skipping small shards within 10 iterations with world size 8
+    # python loaddata.py --dataset=data_ag_news --micro-batch-size=45 --sequence-length=256
+
+    # This checks for circling one epoch with 64 iterations with world size 8
+    # python loaddata.py --dataset=data_ag_news --micro-batch-size=32 --sequence-length=256
+
+    # This is the actual training params with world size 1
+    # python loaddata.py --dataset=data_ag_news --micro-batch-size=16
+    # python3 loaddata.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=-2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2

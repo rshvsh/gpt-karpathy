@@ -79,13 +79,14 @@ def hellaswag_eval(model, device, device_type, ddp, master_process, log_file, dd
         with open(log_file, "a") as f:
             f.write(f"{step} hella {acc_norm:.4f}\n")
 
-def calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, checkpoint_freq, raw_model):
+def calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, checkpoint_freq, raw_model, last_step, val_loss_iters):
     model.eval()
     val_loader.reset()
     with torch.no_grad():
         val_loss_accum = 0.0
-        val_loss_steps = 20
-        for _ in range(val_loss_steps):
+        val_loss_steps = val_loss_iters if len(val_loader.batches) > val_loss_iters else len(val_loader.batches)
+        for i in range(val_loss_steps):
+            print(f"val_loss_step: {i}")
             x, y = val_loader.next_batch()
             x, y = x.to(device), y.to(device)
             with torch.autocast(device_type=device_type, dtype=torch.bfloat16):

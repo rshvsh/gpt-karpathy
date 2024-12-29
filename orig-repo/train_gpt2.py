@@ -1,5 +1,4 @@
 import os
-import math
 import time
 from dataclasses import dataclass
 import torch
@@ -8,7 +7,7 @@ import tiktoken
 
 from model import GPT, GPTConfig
 from args import parse_args
-from loaddata import DataLoaderLite
+from loaddata import DataLoaderLite, DataLoaderRandom
 from lr import get_lr
 from evals import generate_text, calc_val_loss, hellaswag_eval
 
@@ -20,6 +19,7 @@ from evals import generate_text, calc_val_loss, hellaswag_eval
 #
 # here is a sample commandline with args that exercises a lot of options
 # torchrun --standalone --nproc_per_node=1 train_gpt2.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
+# python3 train_gpt2.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=-2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
 
 # run the training loop
 from torch.distributed import init_process_group, destroy_process_group
@@ -67,17 +67,17 @@ if torch.cuda.is_available():
 
 enc = tiktoken.get_encoding("gpt2")
 
-total_batch_size = 524288 # 2**19, ~0.5M, in number of tokens
+total_batch_size = args.total_batch_size # 2**19, 524288 ~0.5M, in number of tokens
 B = args.micro_batch_size # micro batch size # original was 64... needed to reduce due to CUDA out of memory
 T = args.sequence_length # 1024 sequence length
 assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
 if master_process:
-    print(f"total desired batch size: {total_batch_size}")
-    print(f"=> calculated gradient accumulation steps: {grad_accum_steps}")
+    print(f"Total manually set batch size: {total_batch_size}")
+    print(f"=> Calculated gradient accumulation steps: {grad_accum_steps}")
 
-train_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="train", args=args, master_process=master_process)
-val_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split="val", args=args, master_process=master_process)
+train_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="train", dataset=args.dataset, master_process=master_process)
+val_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="val", dataset=args.dataset, master_process=master_process)
 
 torch.set_float32_matmul_precision('high')
 
@@ -114,8 +114,8 @@ for step in range(max_steps):
     last_step = (step == max_steps - 1)
 
     # once in a while evaluate our validation loss and checkpoint the model
-    if step % args.val_loss_freq == 0 or last_step:
-        calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, args.checkpoint_freq, raw_model)
+    if args.val_loss_freq > 0 and (step % args.val_loss_freq == 0 or last_step):
+        calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, args.checkpoint_freq, raw_model, last_step, args.val_loss_iters)
 
     # once in a while evaluate hellaswag
     if args.hellaswag_freq > 0 and (step % args.hellaswag_freq == 0 or last_step) and (not use_compile):
@@ -130,6 +130,7 @@ for step in range(max_steps):
     optimizer.zero_grad()
     loss_accum = 0.0
     for micro_step in range(grad_accum_steps):
+        print(f"micro_step: {micro_step}")
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
         # added after video, this field is also used by the forward pass.

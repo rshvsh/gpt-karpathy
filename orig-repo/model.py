@@ -5,6 +5,8 @@ import torch.nn as nn
 from torch.nn import functional as F
 from hellaswag import render_example, iterate_examples
 
+# TODO:~ we need to implement dropout
+
 class CausalSelfAttention(nn.Module):
 
     def __init__(self, config):
