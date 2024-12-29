@@ -19,7 +19,7 @@ from evals import generate_text, calc_val_loss, hellaswag_eval
 #
 # here is a sample commandline with args that exercises a lot of options
 # torchrun --standalone --nproc_per_node=1 train_gpt2.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
-# python3 train_gpt2.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=-2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
+# python3 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=-2 --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
 
 # run the training loop
 from torch.distributed import init_process_group, destroy_process_group
@@ -67,13 +67,13 @@ if torch.cuda.is_available():
 
 enc = tiktoken.get_encoding("gpt2")
 
-total_batch_size = args.total_batch_size # 2**19, 524288 ~0.5M, in number of tokens
+grad_accum_batch_size = args.grad_accum_batch_size # 2**19, 524288 ~0.5M, in number of tokens
 B = args.micro_batch_size # micro batch size # original was 64... needed to reduce due to CUDA out of memory
 T = args.sequence_length # 1024 sequence length
-assert total_batch_size % (B * T * ddp_world_size) == 0, "make sure total_batch_size is divisible by B * T * ddp_world_size"
-grad_accum_steps = total_batch_size // (B * T * ddp_world_size)
+assert grad_accum_batch_size % (B * T * ddp_world_size) == 0, "make sure grad_accum_batch_size is divisible by B * T * ddp_world_size"
+grad_accum_steps = grad_accum_batch_size // (B * T * ddp_world_size)
 if master_process:
-    print(f"Total manually set batch size: {total_batch_size}")
+    print(f"Total manually set batch size: {grad_accum_batch_size}")
     print(f"=> Calculated gradient accumulation steps: {grad_accum_steps}")
 
 train_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="train", dataset=args.dataset, master_process=master_process)

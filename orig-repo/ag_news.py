@@ -75,6 +75,6 @@ def main():
 
 # needed to get multi-processing to work on MacBook Pro
 if __name__ == '__main__':
-    # there are 62 full training shards with 100k tokens and one with ~73k tokens
+    # there are 62 full training shards with 100k tokens and one with ~73k tokens = 63 training shards
     # => total of 6.2M + 73k = 6.273M tokens
     main()
