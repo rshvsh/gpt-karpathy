@@ -5,7 +5,7 @@
 You should create the rsa key `id_rsa_lambda` per the lambda instructions.
 
 ```bash
-ssh -i ~/.ssh/id_rsa_lambda <ip addr>
+ssh -i ~/.ssh/id_rsa_lambda ubuntu@<ip addr>
 ```
 
 Edit your `~/.ssh/config` file and edit the section for the new host with the new IP adress:
