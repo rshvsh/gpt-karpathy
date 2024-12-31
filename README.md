@@ -1,6 +1,6 @@
 # Running on Lambda
 
-## `ssh` to the remote machine
+# `ssh` to the remote machine
 
 You should create the rsa key `id_rsa_lambda` per the lambda instructions. Start the remote machine and get it's `<ip addr>`
 
@@ -23,13 +23,14 @@ You should cleanup when you finish and shutdown the machine:
 - Edit your `~/.ssh/known_hosts` file and delete the entries with the `<ip addr>`
 - There should be three entries, one each with `ssh-ed25519`, `ssh-rsa` and `ecdsa-sha2-nistp256`
 
-## Export the GitHub token and clone the repo
+# Export the GitHub token and clone the repo
 
 ```bash
 ### Added these variables to your ~/.bashrc file
 export GITHUB_USERNAME="<your github username>"
 export GITHUB_TOKEN="<your github token>"
 export GITHUB_AUTHOR_EMAIL="<your github email>"
+GITHUB_COMMITTER_EMAIL="<your github email>"
 
 # now source your ~/.bashrc file
 source ~/.bashrc
@@ -39,7 +40,22 @@ git config --global user.name $GITHUB_USERNAME
 git clone https://github.com/rshvsh/gpt-karpathy.git
 ```
 
-## Install pyenv
+# Run the setup script
+
+The following sections are now included in a setup script
+- Install `pyenv`
+- Configure the environment for `pyenv`
+  - Setting up the virtual environment
+  - Installing pip and the requirements
+- Configuring S3 access with `rclone`
+- Downloading the datafiles
+
+```bash
+cd gpt-karpathy/orig-repo
+./setup_machine.py
+```
+
+## Install `pyenv`
 
 ```bash
 sudo apt update
@@ -52,7 +68,7 @@ libffi-dev liblzma-dev python3-openssl git
 curl https://pyenv.run | bash
 ```
 
-## Add enviornment variables to `~/.bashrc` and activate the environment
+## Configure the environment for `pyenv`
 
 ```bash
 echo 'export PYENV_ROOT="$HOME/.pyenv"' >> ~/.bashrc
@@ -74,17 +90,12 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-
-# Configure VS Code
-
-- Use thge Remote-SSH extension to connect to the remote host at <ip address>
-- Install the python extention from Microsoft (seems like it needs to install something on the server)
-- Once the virtual environment is created and activated, Cmd+Shift+P and search for Python: Select Interpreter and choose the venv
-
-# Configuring S3 access with `rclone`
+## Configuring S3 access with `rclone`
 
 - Install rclone `sudo apt install rclone`
 - Set `RCLONE_S3_ACCESS_KEY_ID` and `RCLONE_S3_SECRET_ACCESS_KEY` to point to your s3 credentials
+- Set `RCLONE_S3_REGION=us-west-2` to the s3 region for the bucket
+- Set `RCLONE_S3_BUCKET_ROOT` to the s3 bucket root for data files
 - Create or edit your `~/.config/rclone/rclone.conf` to access your s3 account by adding the following section
 
 ```bash
@@ -100,10 +111,10 @@ bucket_acl = private
 Common rclone commands:
 
 ```bash
-rclone ls s3-name:bucket-name
-rclone mkdir s3-name:bucket-name
-rclone copy /path/to/local/file.txt s3-name:bucket-name
-rclone sync /local/path s3-name:bucket-path-name --create-empty-src-dirs --progress
+rclone ls s3-name:$RCLONE_S3_BUCKET_ROOT
+rclone mkdir s3-name:$RCLONE_S3_BUCKET_ROOT
+rclone copy /path/to/local/file.txt s3-name:$RCLONE_S3_BUCKET_ROOT/path/name
+rclone sync /local/path s3-name:$RCLONE_S3_BUCKET_ROOT/path/name --create-empty-src-dirs --progress
 ```
 
 Note: be sure to fully qualify paths when using rclone. For example:
@@ -116,6 +127,11 @@ rclone copy /path/to/localdir s3-name:bucket-name/localdir
 rclone copy s3-name:bucket-name/localdir /path/to/localdir 
 ```
 
+# Configure VS Code
+
+- Use thge Remote-SSH extension to connect to the remote host at `<ip address>`
+- Install the python extention from Microsoft (seems like it needs to install something on the server)
+- Once the virtual environment is created and activated, Cmd+Shift+P and search for Python: Select Interpreter and choose the venv
 
 # Running on Hyperbolic
 
