@@ -2,13 +2,9 @@
 
 ## `ssh` to the remote machine
 
-You should create the rsa key `id_rsa_lambda` per the lambda instructions.
+You should create the rsa key `id_rsa_lambda` per the lambda instructions. Start the remote machine and get it's `<ip addr>`
 
-```bash
-ssh -i ~/.ssh/id_rsa_lambda ubuntu@<ip addr>
-```
-
-Edit your `~/.ssh/config` file and edit the section for the new host with the new IP adress:
+On your local machine edit your `~/.ssh/config` file and edit the section for the new host with the new IP adress:
 
 ```bash
 Host <ip addr>
@@ -17,9 +13,31 @@ Host <ip addr>
   User ubuntu
 ```
 
+Now you can ssh to the remote machine
+
+```bash
+ssh -i ~/.ssh/id_rsa_lambda ubuntu@<ip addr>
+```
+
 You should cleanup when you finish and shutdown the machine:
 - Edit your `~/.ssh/known_hosts` file and delete the entries with the `<ip addr>`
 - There should be three entries, one each with `ssh-ed25519`, `ssh-rsa` and `ecdsa-sha2-nistp256`
+
+## Export the GitHub token and clone the repo
+
+```bash
+### Added these variables to your ~/.bashrc file
+export GITHUB_USERNAME="<your github username>"
+export GITHUB_TOKEN="<your github token>"
+export GITHUB_AUTHOR_EMAIL="<your github email>"
+
+# now source your ~/.bashrc file
+source ~/.bashrc
+git config --global user.email $GITHUB_AUTHOR_EMAIL
+git config --global user.name $GITHUB_USERNAME
+
+git clone https://github.com/rshvsh/gpt-karpathy.git
+```
 
 ## Install pyenv
 
@@ -56,16 +74,6 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-## Export the GitHub token and clone the repo
-
-```bash
-export GITHUB_TOKEN="<your github token>"
-
-git config --global user.email "you@example.com"
-git config --global user.name "Your Name"
-
-git clone https://github.com/rshvsh/gpt-karpathy.git
-```
 
 # Configure VS Code
 
