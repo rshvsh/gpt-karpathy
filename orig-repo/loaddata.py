@@ -90,10 +90,10 @@ class DataLoaderRandom:
         num_tokens = len(self.tokens)
         num_batches = (num_tokens - 1) // self.dataloader_batch_size # added the -1 so that we have an extra token for the last batch
 
-        print(f"Split {self.split}: Reset: shard index {self.current_shard_index}:{self.shards[self.current_shard_index]} has {num_tokens:_} tokens and {num_batches:_} batches")
+        # print(f"Split {self.split}: Reset: shard index {self.current_shard_index}:{self.shards[self.current_shard_index]} has {num_tokens:_} tokens and {num_batches:_} batches")
         if num_batches == 0:
             # this shard is too small, skip it and go to the next one
-            print(f"Split {self.split}: Shard is too small, skipping shard index {self.current_shard_index}:{self.shards[self.current_shard_index]}")
+            # print(f"Split {self.split}: Shard is too small, skipping shard index {self.current_shard_index}:{self.shards[self.current_shard_index]}")
             next_shard_index = 0 if self.current_shard_index + 1 >= len(self.shards) else self.current_shard_index + 1            
             # TODO:~ at some point check for infinite loop here, but for now we assume there is always a valid shard
             self.reset(next_shard_index)

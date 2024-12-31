@@ -130,7 +130,7 @@ for step in range(max_steps):
     optimizer.zero_grad()
     loss_accum = 0.0
     for micro_step in range(grad_accum_steps):
-        print(f"micro_step: {micro_step}")
+        # print(f"micro_step: {micro_step}")
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
         # added after video, this field is also used by the forward pass.
