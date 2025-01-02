@@ -55,6 +55,12 @@ cd gpt-karpathy/orig-repo
 ./setup_machine.py
 ```
 
+NOTE: 
+
+- For pyenv you have to run the setup script twice more and before the last time run `source ~/.bashrc`. I haven't diagnosed why this is required twice more vs once more, but for now this is idempotent and works :-)
+- After this you also are prompted to initialize the virtual enviornment in the shell by running `pyenv activate myenv` in the shell. This is required because you have to do this in the calling shell. Again, you can just run the setup script again - this is by design.
+- You will also be prompted to create the necessary RCLONE environment variables if you don't already have them. Do so and rerun the startup script - this is also by design.
+
 ## Install `pyenv`
 
 ```bash
@@ -132,6 +138,37 @@ rclone copy s3-name:bucket-name/localdir /path/to/localdir
 - Use thge Remote-SSH extension to connect to the remote host at `<ip address>`
 - Install the python extention from Microsoft (seems like it needs to install something on the server)
 - Once the virtual environment is created and activated, Cmd+Shift+P and search for Python: Select Interpreter and choose the venv
+
+# Running `tmux` for background processing
+
+Useful commands:
+
+```bash
+tmux new -s session_name
+tmux attach -t session_name
+tmux list-sessions
+tmux kill-session -t session_name
+
+# for detaching
+ctrl+b then d while in the tmux session
+# OR
+tmux detach
+```
+
+# Sample commands
+
+Some torchrun samples:
+
+```bash
+# ag_news dataset, run on two GPUs and debug the dataloader
+torchrun --standalone --nproc_per_node=2 train_gpt2.py --micro-batch-size=16 --val-loss-freq=25 --hellaswag-freq=25 --dataset=data_ag_news --max-steps=1000 --warmup-steps=10 --generate-freq=25 --checkpoint-freq=50 --debug-loader=False
+```
+
+Monitor the nvidia gpus:
+
+```bash
+watch -n 1 nvidia-smi
+```
 
 # Running on Hyperbolic
 
