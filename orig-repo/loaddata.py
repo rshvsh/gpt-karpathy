@@ -52,13 +52,14 @@ class DataLoaderLite:
 # then within the shard, we want to pick the micro-batches randomly without replacement
 import random
 class DataLoaderRandom:
-    def __init__(self, B, T, process_rank, ddp_world_size, split, dataset, master_process):
-        print(f"DataLoaderRandom for {split}")
+    def __init__(self, B, T, process_rank, ddp_world_size, split, dataset, master_process, args):
+        print(f"Rank {process_rank}: DataLoaderRandom for {split}")
         self.B = B
         self.T = T
         self.process_rank = process_rank
         self.num_processes = ddp_world_size
         self.split = split
+        self.args = args
         assert split in {'train', 'val'}
 
         # get the shard filenames
@@ -71,11 +72,11 @@ class DataLoaderRandom:
         random.shuffle(shards)
         self.shards = shards
         assert len(shards) > 0, f"no shards found for split {split}"
-        print(f"Found {len(shards)} shards for split {split}")
+        print(f"Rank {process_rank}: Split {split}: Found {len(shards)} shards")
 
         # this is the size of the batch being pulled
         self.dataloader_batch_size = B * T * ddp_world_size
-        print(f"Total data loader batch size: {self.dataloader_batch_size:_} for process rank {process_rank}")
+        print(f"Rank {self.process_rank}: Split {split}: Total data loader batch size: {self.dataloader_batch_size:_}")
         
         self.reset()
 
@@ -90,13 +91,13 @@ class DataLoaderRandom:
         num_tokens = len(self.tokens)
         num_batches = (num_tokens - 1) // self.dataloader_batch_size # added the -1 so that we have an extra token for the last batch
 
-        # print(f"Split {self.split}: Reset: shard index {self.current_shard_index}:{self.shards[self.current_shard_index]} has {num_tokens:_} tokens and {num_batches:_} batches")
+        print(f"Rank {self.process_rank}: Split {self.split}: reset(): shard index {self.current_shard_index}:{self.shards[self.current_shard_index]} has {num_tokens:_} tokens and {num_batches:_} batches") if self.args.debug_loader else None
         if num_batches == 0:
             # this shard is too small, skip it and go to the next one
-            # print(f"Split {self.split}: Shard is too small, skipping shard index {self.current_shard_index}:{self.shards[self.current_shard_index]}")
-            next_shard_index = 0 if self.current_shard_index + 1 >= len(self.shards) else self.current_shard_index + 1            
+            print(f"Rank {self.process_rank}: Split {self.split}: reset(): Shard is too small, skipping shard index {self.current_shard_index}:{self.shards[self.current_shard_index]}") if self.args.debug_loader else None
+            next_shard_index = 0 if self.current_shard_index + 1 >= len(self.shards) else self.current_shard_index + 1
             # TODO:~ at some point check for infinite loop here, but for now we assume there is always a valid shard
-            self.reset(next_shard_index)
+            self.reset(current_shard_index=next_shard_index)
             return
 
         self.batches = list(range(num_batches))
@@ -106,7 +107,8 @@ class DataLoaderRandom:
 
     def next_batch(self):
         B, T = self.B, self.T
-        start_position = B * T * self.num_processes * self.current_batch_index + self.process_rank 
+        start_position = B * T * self.num_processes * self.current_batch_index + B * T * self.process_rank
+        print(f"Rank: {self.process_rank}: Split {self.split}: next_batch(): start_position={start_position}") if self.args.debug_loader else None
         buf = self.tokens[start_position : start_position+B*T+1]
         x = (buf[:-1]).view(B, T) # inputs
         y = (buf[1:]).view(B, T) # targets
@@ -117,7 +119,7 @@ class DataLoaderRandom:
             self.current_shard_index += 1
             if self.current_shard_index >= len(self.shards):
                 # we are out of shards, reset to the beginning
-                print(f"Split {self.split}: Shard index {self.current_shard_index}: Resetting the first shard index, we've gone through one epoch")
+                print(f"Rank {self.process_rank}: Split {self.split}: Shard index {self.current_shard_index}: Resetting to the first shard index, we've gone through one epoch of data")
                 self.reset()
             else:
                 # load tokens for the next shard
@@ -142,7 +144,7 @@ if __name__ == "__main__":
     print(f"Running {iters} iterations")
     for i in range(iters):
         print(i, dl.current_shard_index, dl.current_batch_index)
-        x, y = dl.next_batch()
+        x, y = dl.next_batch(process_rank=0)
 
     # This checks for skipping small shards within 10 iterations with world size 8
     # python loaddata.py --dataset=data_ag_news --micro-batch-size=45 --sequence-length=256

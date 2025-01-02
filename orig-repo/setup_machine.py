@@ -182,7 +182,10 @@ bucket_acl = private
                 print(f"Appending to config file {config_file}")
                 f.write(config)
     else:
-         with open(config_file, "w") as f:
+        config_dir = os.path.dirname(config_file)
+        os.makedirs(config_dir, exist_ok=True)
+
+        with open(config_file, "w") as f:
             print(f"Writing to config file {config_file}")
             f.write("\n##### Added by setup_machine.py script\n")
             f.write(config)

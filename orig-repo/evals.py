@@ -79,12 +79,14 @@ def hellaswag_eval(model, device, device_type, ddp, master_process, log_file, dd
         with open(log_file, "a") as f:
             f.write(f"{step} hella {acc_norm:.4f}\n")
 
-def calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, checkpoint_freq, raw_model, last_step, val_loss_iters):
+def calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, checkpoint_freq, raw_model, last_step, val_loss_iters, num_processes):
     model.eval()
     val_loader.reset()
     with torch.no_grad():
         val_loss_accum = 0.0
-        val_loss_steps = val_loss_iters if len(val_loader.batches) > val_loss_iters else len(val_loader.batches)
+        # TODO:~ be more accurate of the number of steps here by calculating how many validation batches are possible with the available tokens. For now this is ok. We don't want to omit data, or do more than one epoch
+        val_loss_steps = val_loss_iters if len(val_loader.batches) * num_processes > val_loss_iters else len(val_loader.batches) * num_processes
+        print(f"Will run {val_loss_steps} validation loss calculations over {len(val_loader.batches)} validation batches")
         for i in range(val_loss_steps):
             print(f"val_loss_step: {i}")
             x, y = val_loader.next_batch()
@@ -97,7 +99,7 @@ def calc_val_loss(model, val_loader, device, device_type, ddp, master_process, l
     if ddp:
         dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
     if master_process:
-        print(f"validation loss: {val_loss_accum.item():.4f}")
+        print(f"validation loss: {val_loss_accum.item():.4f} calculated in {val_loss_steps} val_loss_steps")
         with open(log_file, "a") as f:
             f.write(f"{step} val {val_loss_accum.item():.4f}\n")
 

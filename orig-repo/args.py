@@ -27,6 +27,8 @@ def parse_args():
     parser.add_argument("--generate-freq", type=int, default=250, help="How often to generate text")
     parser.add_argument("--checkpoint-freq", type=int, default=5000, help="How often to checkpoint the model")
 
+    parser.add_argument("--debug-loader", type=bool, default=False, help="Prints messages with different process rank indices to diagnose loader issues.")
+
     args = parser.parse_args()
     return args
 
@@ -51,9 +53,12 @@ if __name__ == "__main__":
     print(f"Num embedding dimensions {args.num_embds}")
 
     print(f"Val loss frequency {args.val_loss_freq}")
+    print(f"Val loss iterations {args.val_loss_iters}")
     print(f"Hellaswag frequency {args.hellaswag_freq}")
     print(f"Text generation frequency {args.generate_freq}")
     print(f"Model checkpoint frequency {args.checkpoint_freq}")
+
+    print(f"Debug loader messages {args.debug_loader}")
 
     print("""
           grad_accum_batch_size MUST be a multiple of B * T * ddp_world_size
