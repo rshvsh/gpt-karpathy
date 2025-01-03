@@ -9,7 +9,7 @@ from model import GPT, GPTConfig
 from args import parse_args
 from loaddata import DataLoaderLite, DataLoaderRandom
 from lr import get_lr
-from evals import generate_text, calc_val_loss, hellaswag_eval
+from evals import Evals
 
 # -----------------------------------------------------------------------------
 # simple launch:
@@ -44,7 +44,7 @@ if ddp:
     ddp_world_size = int(os.environ['WORLD_SIZE'])
     device = f'cuda:{ddp_local_rank}'
     torch.cuda.set_device(device)
-    master_process = ddp_rank == 0 # this process will do logging, checkpointing etc.
+    master_process = (ddp_rank == 0) # this process will do logging, checkpointing etc.
 else:
     # vanilla, non-DDP run
     ddp_rank = 0
@@ -104,11 +104,23 @@ max_steps = args.max_steps # 19,073 steps is ~1 epoch, if data is 10B tokens and
 optimizer = raw_model.configure_optimizers(weight_decay=weight_decay, learning_rate=max_lr, device_type=device_type, master_process=master_process)
 
 # create the log directory we will write checkpoints to and log to
-log_dir = "log"
+log_dir = args.log_dir
 os.makedirs(log_dir, exist_ok=True)
-log_file = os.path.join(log_dir, f"log.txt")
+log_file = os.path.join(log_dir, f"{args.log_file}")
 with open(log_file, "w") as f: # open for writing to clear the file
     pass
+
+# setup the evaluations
+evals = Evals(args=args,
+              model=model,
+              encoding=enc,
+              process_rank=ddp_rank,
+              num_processes=ddp_world_size,
+              device_type=device_type,
+              device=device,
+              master_process=master_process,
+              ddp=ddp,
+              val_loader=val_loader)
 
 for step in range(max_steps):
     t0 = time.time()
@@ -116,15 +128,15 @@ for step in range(max_steps):
 
     # once in a while evaluate our validation loss and checkpoint the model
     if args.val_loss_freq > 0 and (step % args.val_loss_freq == 0 or last_step):
-        calc_val_loss(model, val_loader, device, device_type, ddp, master_process, log_dir, log_file, step, args.checkpoint_freq, raw_model, last_step, args.val_loss_iters, ddp_world_size)
+        evals.checkpoint_and_val_loss(step, last_step)
 
     # once in a while evaluate hellaswag
     if args.hellaswag_freq > 0 and (step % args.hellaswag_freq == 0 or last_step) and (not use_compile):
-        hellaswag_eval(model, device, device_type, ddp, master_process, log_file, ddp_world_size, ddp_rank, step)
+        evals.hellawag_eval(step)
 
     # once in a while generate from the model (except step 0, which is noise)
     if ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):
-        generate_text(model, enc, device, ddp_rank, device_type)
+        evals.generate_text(step)
 
     # do one step of the optimization
     model.train()

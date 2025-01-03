@@ -28,6 +28,12 @@ def parse_args():
     parser.add_argument("--checkpoint-freq", type=int, default=5000, help="How often to checkpoint the model")
 
     parser.add_argument("--debug-loader", type=bool, default=False, help="Prints messages with different process rank indices to diagnose loader issues.")
+    parser.add_argument("--log-dir", type=str, default="log", help="The log directory")
+    parser.add_argument("--log-file", type=str, default="log.txt", help="The log file name")
+
+    parser.add_argument("--gen-text-prompt", type=str, default="Hello, I'm a language model,", help="The default prompt for text generation")
+    parser.add_argument("--gen-text-num-samples", type=int, default=4, help="The number of samples to generate")
+    parser.add_argument("--gen-text-len", type=int, default=32, help="The maximum length of the text to be generated")
 
     args = parser.parse_args()
     return args
@@ -59,8 +65,15 @@ if __name__ == "__main__":
     print(f"Model checkpoint frequency {args.checkpoint_freq}")
 
     print(f"Debug loader messages {args.debug_loader}")
+    print(f"The log directory {args.log_dir}")
+    print(f"The log file {args.log_file}")
+
+    print(f"The text prompt {args.gen_text_prompt}")
+    print(f"The number of samples to be generated {args.gen_text_num_samples}")
+    print(f"The max length of the generated samples {args.gen_text_len}")
 
     print("""
+          NOTE:
           grad_accum_batch_size MUST be a multiple of B * T * ddp_world_size
 
           - Seems like a large grad_accum_batch_size is good, because it prevents the model from updating too frequently

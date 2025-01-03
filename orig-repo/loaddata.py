@@ -119,7 +119,8 @@ class DataLoaderRandom:
             self.current_shard_index += 1
             if self.current_shard_index >= len(self.shards):
                 # we are out of shards, reset to the beginning
-                print(f"Rank {self.process_rank}: Split {self.split}: Shard index {self.current_shard_index}: Resetting to the first shard index, we've gone through one epoch of data")
+                if self.split == 'train' or self.args.debug_loader:
+                    print(f"Rank {self.process_rank}: Split {self.split}: Shard index {self.current_shard_index}: Resetting to the first shard index, we've gone through one epoch of data")
                 self.reset()
             else:
                 # load tokens for the next shard
