@@ -161,7 +161,7 @@ Some torchrun samples:
 
 ```bash
 # ag_news dataset, run on two GPUs and debug the dataloader
-torchrun --standalone --nproc_per_node=2 train_gpt2.py --micro-batch-size=16 --val-loss-freq=25 --hellaswag-freq=25 --dataset=data_ag_news --max-steps=1000 --warmup-steps=10 --generate-freq=25 --checkpoint-freq=50 --debug-loader=False
+torchrun --standalone --nproc_per_node=2 train_gpt2.py --micro-batch-size=16 --val-loss-freq=25 --hellaswag-freq=25 --dataset=data_ag_news --max-steps=1000 --warmup-steps=10 --generate-freq=25 --checkpoint-freq=50e --gen_text_prompt="In breaking news,"
 ```
 
 Monitor the nvidia gpus:
