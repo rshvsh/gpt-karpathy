@@ -15,7 +15,7 @@ def parse_args():
 
     parser.add_argument("--gpt-block-size", type=int, default=1024, help="Default block size in the GPT model. Should be equal to the sequence length")
     parser.add_argument("--gpt-vocab-size", type=int, default=50257, help="Vocab size default in the GPT model. Sometimes rounded up to be a nice even number during training")
-    parser.add_argument("--train-vocab-size", type=int, default=50304, help="Vocab size default in the GPT model. Sometimes rounded up to be a nice even number during training")
+    parser.add_argument("--train-vocab-size", type=int, default=50304, help="Vocab size used during training. Should be a good multiple of 2, rounded up above the GPT vocab size")
 
     parser.add_argument("--num-layers", type=int, default=12, help="Number of layers")
     parser.add_argument("--num-heads", type=int, default=12, help="Number of heads")
@@ -38,40 +38,55 @@ def parse_args():
     args = parser.parse_args()
     return args
 
+def pretty_print(args):
+    print("\n")
+    print(f"Training dataset:{args.dataset}")
+
+    print(f"\nThese affect the memory the training data batches need:")
+    print(f"\tGrad accumulation batch     {args.grad_accum_batch_size:_}")
+    print(f"\tMicro batch size            {args.micro_batch_size:_}")
+    print(f"\tSequence length             {args.sequence_length:_}")
+
+    print(f"\nThese affect model size:")
+    print(f"\tBlock size                  {args.gpt_block_size:_}")
+    print(f"\tGPT vocab size              {args.gpt_vocab_size:_}")
+    print(f"\tTrain vocab size            {args.train_vocab_size:_}\t(should be even and as close to a power of 2 as possible)")
+    print(f"\tNum layers                  {args.num_layers}")
+    print(f"\tNum heads                   {args.num_heads}")
+    print(f"\tNum embedding dimensions    {args.num_embds}")
+
+    print(f"\nThese affect the learning rate decay:")
+    print(f"\tWeight decay                {args.weight_decay:.6f}")
+    print(f"\tMaximum learning rate       {args.max_lr:.8f}")
+    print(f"\tWarmup steps                {args.warmup_steps:_}")
+    print(f"\tMax steps                   {args.max_steps:_}")
+
+    print(f"\nThese are used to change the log file location:")
+    print(f"\tThe log directory           {args.log_dir}")
+    print(f"\tThe log file                {args.log_file}")
+
+    print(f"\nThese affect frequency of various validations/checkpoints:")
+    print(f"\tVal loss frequency          {args.val_loss_freq:_}\t\t(<0 to disable)")
+    print(f"\tVal loss iterations         {args.val_loss_iters:_}")
+    print(f"\tHellaswag frequency         {args.hellaswag_freq:_}\t\t(<0 to disable)")
+    print(f"\tText generation frequency   {args.generate_freq:_}\t\t(<0 to disable)")
+    print(f"\tModel checkpoint frequency  {args.checkpoint_freq:_}")
+
+    print(f"\nThese affect text generation from a provided prompt:")
+    print(f"\tThe text prompt             {args.gen_text_prompt}")
+    print(f"\tNum samples generated       {args.gen_text_num_samples}")
+    print(f"\tMax len of samples          {args.gen_text_len}")
+
+    print(f"\nThis is used to debug dataloader issues with multiple GPUs:")
+    print(f"\tDebug loader messages       {args.debug_loader}")
+    print("\n")
+
 if __name__ == "__main__":
     args = parse_args()
-    print(f"Training for {args.dataset} dataset")
-    print(f"Gradient accumulation batch {args.grad_accum_batch_size}")
-    print(f"Micro batch size {args.micro_batch_size}")
-    print(f"Sequence length {args.sequence_length}")
+    pretty_print(args)
 
-    print(f"Weight decay {args.weight_decay:.6f}")
-    print(f"Maximum learning rate {args.max_lr:.8f}")
-    print(f"Warmup steps {args.warmup_steps}")
-    print(f"Max steps {args.max_steps}")
-
-    print(f"Block size {args.gpt_block_size}")
-    print(f"GPT vocab size {args.gpt_vocab_size}")
-    print(f"Train vocab size {args.train_vocab_size}")
-
-    print(f"Num layers {args.num_layers}")
-    print(f"Num heads {args.num_heads}")
-    print(f"Num embedding dimensions {args.num_embds}")
-
-    print(f"Val loss frequency {args.val_loss_freq}")
-    print(f"Val loss iterations {args.val_loss_iters}")
-    print(f"Hellaswag frequency {args.hellaswag_freq}")
-    print(f"Text generation frequency {args.generate_freq}")
-    print(f"Model checkpoint frequency {args.checkpoint_freq}")
-
-    print(f"Debug loader messages {args.debug_loader}")
-    print(f"The log directory {args.log_dir}")
-    print(f"The log file {args.log_file}")
-
-    print(f"The text prompt {args.gen_text_prompt}")
-    print(f"The number of samples to be generated {args.gen_text_num_samples}")
-    print(f"The max length of the generated samples {args.gen_text_len}")
-
+    import sys
+    sys.exit(0)
     print("""
           NOTE:
           grad_accum_batch_size MUST be a multiple of B * T * ddp_world_size
@@ -110,5 +125,3 @@ if __name__ == "__main__":
           - 100M tokens / (64 * 1024 * 8) = 19 steps          
 
           """)
-
-    print(args.debug_loader)

@@ -1,12 +1,10 @@
 import os
 import time
-from dataclasses import dataclass
 import torch
-from torch.nn import functional as F
 import tiktoken
 
 from model import GPT, GPTConfig
-from args import parse_args
+from args import parse_args, pretty_print
 from loaddata import DataLoaderLite, DataLoaderRandom
 from lr import get_lr
 from evals import Evals
@@ -18,7 +16,10 @@ from evals import Evals
 # torchrun --standalone --nproc_per_node=8 train_gpt2.py
 #
 # here is a sample commandline with args that exercises a lot of options
-# python3 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=-2 --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
+
+# No evals, just train with ag_news dataset:
+# python3 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=-2 --hellaswag-freq=-2 --generate-freq=-2 --checkpoint-freq=-2
+
 # torchrun --standalone --nproc_per_node=1 train_gpt2.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
 # torchrun --standalone --nproc_per_node=2 train_gpt2.py --micro-batch-size=16 --val-loss-freq=10 --hellaswag-freq=-2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=10 --checkpoint-freq=-2
 
@@ -28,9 +29,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 
 args = parse_args()
-max_arg_length = max(len(arg) for arg in vars(args).keys())
-for arg, value in vars(args).items():
-    print(f"{arg:<{max_arg_length}}: {value}")
+pretty_print(args)
 
 # set up DDP (distributed data parallel).
 # torchrun command sets the env variables RANK, LOCAL_RANK, and WORLD_SIZE
@@ -74,8 +73,8 @@ T = args.sequence_length # 1024 sequence length
 assert grad_accum_batch_size % (B * T * ddp_world_size) == 0, "make sure grad_accum_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = grad_accum_batch_size // (B * T * ddp_world_size)
 if master_process:
-    print(f"Total manually set batch size: {grad_accum_batch_size}")
-    print(f"=> Calculated gradient accumulation steps: {grad_accum_steps}")
+    print(f"Total manually set batch size: {grad_accum_batch_size:_}")
+    print(f"=> Calculated gradient accumulation steps: {grad_accum_steps:_}")
 
 train_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="train", dataset=args.dataset, master_process=master_process, args=args)
 val_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="val", dataset=args.dataset, master_process=master_process, args=args)
@@ -135,10 +134,10 @@ for step in range(max_steps):
         evals.hellawag_eval(step)
 
     # once in a while generate from the model (except step 0, which is noise)
-    if ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):
+    if (args.generate_freq > 0) and ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):
         evals.generate_text(step)
 
-    # do one step of the optimization
+    # do one step of the optimization, go through all the microbatches in this grad eval step
     model.train()
     optimizer.zero_grad()
     loss_accum = 0.0
