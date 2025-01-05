@@ -5,7 +5,7 @@ import tiktoken
 
 from model import GPT, GPTConfig
 from args import parse_args, pretty_print
-from loaddata import DataLoaderLite, DataLoaderRandom
+from loaddata import DataLoaderRandom
 from lr import get_lr
 from evals import Evals
 
@@ -15,13 +15,16 @@ from evals import Evals
 # DDP launch for e.g. 8 GPUs:
 # torchrun --standalone --nproc_per_node=8 train_gpt2.py
 #
-# here is a sample commandline with args that exercises a lot of options
+# Sample commandlines
 
 # No evals, just train with ag_news dataset:
 # python3 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=-2 --hellaswag-freq=-2 --generate-freq=-2 --checkpoint-freq=-2
 
-# torchrun --standalone --nproc_per_node=1 train_gpt2.py --micro-batch-size=16 --val-loss-freq=2 --hellaswag-freq=2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=2 --checkpoint-freq=2
-# torchrun --standalone --nproc_per_node=2 train_gpt2.py --micro-batch-size=16 --val-loss-freq=10 --hellaswag-freq=-2 --dataset=data_ag_news --max-steps=100 --warmup-steps=10 --generate-freq=10 --checkpoint-freq=-2
+# torchrun with single GPU and all evals
+# torchrun --standalone --nproc_per_node=1 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=2 --generate-freq=2 --checkpoint-freq=2
+
+# torchrun with two GPUs and all evals except hellaswag (takes a lot of time)
+# torchrun --standalone --nproc_per_node=2 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=-2 --generate-freq=2 --checkpoint-freq=2
 
 # run the training loop
 from torch.distributed import init_process_group, destroy_process_group
@@ -76,8 +79,8 @@ if master_process:
     print(f"Total manually set batch size: {grad_accum_batch_size:_}")
     print(f"=> Calculated gradient accumulation steps: {grad_accum_steps:_}")
 
-train_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="train", dataset=args.dataset, master_process=master_process, args=args)
-val_loader = DataLoaderRandom(B=B, T=T, process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="val", dataset=args.dataset, master_process=master_process, args=args)
+train_loader = DataLoaderRandom(process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="train", dataset=args.dataset, args=args)
+val_loader = DataLoaderRandom(process_rank=ddp_rank, ddp_world_size=ddp_world_size, split="val", dataset=args.dataset, args=args)
 
 torch.set_float32_matmul_precision('high')
 

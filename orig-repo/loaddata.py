@@ -8,54 +8,15 @@ def load_tokens(filename):
     ptt = torch.tensor(npt, dtype=torch.long)
     return ptt
 
-class DataLoaderLite:
-    def __init__(self, B, T, process_rank, num_processes, split, dataset, master_process):
-        self.B = B
-        self.T = T
-        self.process_rank = process_rank
-        self.num_processes = num_processes
-        assert split in {'train', 'val'}
-
-        # get the shard filenames
-        data_root = dataset # "edu_fineweb10B"
-        shards = os.listdir(data_root)
-        shards = [s for s in shards if split in s]
-        shards = sorted(shards)
-        shards = [os.path.join(data_root, s) for s in shards]
-        self.shards = shards
-        assert len(shards) > 0, f"no shards found for split {split}"
-        if master_process:
-            print(f"found {len(shards)} shards for split {split}")
-        self.reset()
-
-    def reset(self):
-        # state, init at shard zero
-        self.current_shard = 0
-        self.tokens = load_tokens(self.shards[self.current_shard])
-        self.current_position = self.B * self.T * self.process_rank
-
-    def next_batch(self):
-        B, T = self.B, self.T
-        buf = self.tokens[self.current_position : self.current_position+B*T+1]
-        x = (buf[:-1]).view(B, T) # inputs
-        y = (buf[1:]).view(B, T) # targets
-        # advance the position in the tensor
-        self.current_position += B * T * self.num_processes
-        # if loading the next batch would be out of bounds, advance to next shard
-        if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
-            self.current_shard = (self.current_shard + 1) % len(self.shards)
-            self.tokens = load_tokens(self.shards[self.current_shard])
-            self.current_position = B * T * self.process_rank
-        return x, y
-
-# we actually want to pick the shards randomly without replacement
-# then within the shard, we want to pick the micro-batches randomly without replacement
+# We want to pick the shards randomly without replacement
+# Then within the shard, we want to pick the micro-batches randomly without replacement
 import random
 class DataLoaderRandom:
-    def __init__(self, B, T, process_rank, ddp_world_size, split, dataset, master_process, args):
+
+    def __init__(self, process_rank, ddp_world_size, split, dataset, args):
         print(f"Rank {process_rank}: DataLoaderRandom for {split}")
-        self.B = B
-        self.T = T
+        self.B = args.micro_batch_size
+        self.T = args.sequence_length
         self.process_rank = process_rank
         self.num_processes = ddp_world_size
         self.split = split
@@ -75,7 +36,7 @@ class DataLoaderRandom:
         print(f"Rank {process_rank}: Split {split}: Found {len(shards)} shards")
 
         # this is the size of the batch being pulled
-        self.dataloader_batch_size = B * T * ddp_world_size
+        self.dataloader_batch_size = self.B * self.T * ddp_world_size
         print(f"Rank {self.process_rank}: Split {split}: Total data loader batch size: {self.dataloader_batch_size:_}")
         
         self.reset()
@@ -100,8 +61,11 @@ class DataLoaderRandom:
             self.reset(current_shard_index=next_shard_index)
             return
 
+        # The following approach shuffles the batches in the shard. 
+        # An alternate way is to shuffle the documents (separated by |<endoftext>|) in the shard
+        # Then we wouldn't have to worry about the current_batch_index
+        # NOTE:~ regardless, I think we should still shuffles the shards themselves
         self.batches = list(range(num_batches))
-
         random.seed(1957) # the seed is important so that all processes pick from the same batches
         random.shuffle(self.batches)
 
@@ -130,8 +94,9 @@ class DataLoaderRandom:
         return x, y
 
 if __name__ == "__main__":
-    from args import parse_args
+    from args import parse_args, pretty_print
     args = parse_args()
+    pretty_print(args)
     print("micro batch size:", args.micro_batch_size)
     print("sequence length:", args.sequence_length)
     world_size = 1
@@ -141,11 +106,12 @@ if __name__ == "__main__":
     num_batches_per_shard = shard_len // (args.micro_batch_size * args.sequence_length * world_size)
     iters = num_shards * num_batches_per_shard + 10
 
-    dl = DataLoaderRandom(args.micro_batch_size, args.sequence_length, process_num, world_size, "val", args.dataset, True)
+    dl = DataLoaderRandom(process_num, world_size, "val", args.dataset, args)
     print(f"Running {iters} iterations")
+    print("iter, shard index, batch index")
     for i in range(iters):
-        print(i, dl.current_shard_index, dl.current_batch_index)
-        x, y = dl.next_batch(process_rank=0)
+        print(f"{i}, {dl.current_shard_index}, {dl.current_batch_index}")
+        x, y = dl.next_batch()
 
     # This checks for skipping small shards within 10 iterations with world size 8
     # python loaddata.py --dataset=data_ag_news --micro-batch-size=45 --sequence-length=256
