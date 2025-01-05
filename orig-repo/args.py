@@ -27,7 +27,7 @@ def parse_args():
     parser.add_argument("--generate-freq", type=int, default=250, help="How often to generate text")
     parser.add_argument("--checkpoint-freq", type=int, default=5000, help="How often to checkpoint the model")
 
-    parser.add_argument("--debug-loader", type=bool, default=False, help="Prints messages with different process rank indices to diagnose loader issues.")
+    parser.add_argument("--debug-loader", action='store_true', help="Prints messages with different process rank indices to diagnose loader issues.")
     parser.add_argument("--log-dir", type=str, default="log", help="The log directory")
     parser.add_argument("--log-file", type=str, default="log.txt", help="The log file name")
 
@@ -110,3 +110,5 @@ if __name__ == "__main__":
           - 100M tokens / (64 * 1024 * 8) = 19 steps          
 
           """)
+
+    print(args.debug_loader)
