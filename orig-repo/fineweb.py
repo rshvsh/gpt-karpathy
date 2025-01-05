@@ -13,7 +13,6 @@ import numpy as np
 import tiktoken
 from datasets import load_dataset # pip install datasets
 from tqdm import tqdm # pip install tqdm
-import torch
 
 # ------------------------------------------
 local_dir = "edu_fineweb10B"
