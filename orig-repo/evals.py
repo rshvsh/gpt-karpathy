@@ -198,7 +198,7 @@ class Evals:
         sz = "124M"
         hella2_baseline = 0.294463
         hella3_baseline = 0.337
-        loss_baseline = 0.337
+        loss_baseline = 3.2924
     
         # load the log file
         with open(self.log_file, "r") as f:
