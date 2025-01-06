@@ -44,6 +44,8 @@ if ddp:
     device = f'cuda:{ddp_local_rank}'
     torch.cuda.set_device(device)
     master_process = (ddp_rank == 0) # this process will do logging, checkpointing etc.
+    if master_process:
+        print(f"--nproc_per_node={ddp_world_size}")
 else:
     # vanilla, non-DDP run
     ddp_rank = 0
@@ -73,7 +75,7 @@ T = args.sequence_length # 1024 sequence length
 assert grad_accum_batch_size % (B * T * ddp_world_size) == 0, "make sure grad_accum_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = grad_accum_batch_size // (B * T * ddp_world_size)
 if master_process:
-    print(f"Non-default command-line parameters: {cmdline}")
+    print(f"{cmdline}")
     print(f"Total manually set batch size: {grad_accum_batch_size:_}")
     print(f"=> Calculated gradient accumulation steps: {grad_accum_steps:_}")
 
