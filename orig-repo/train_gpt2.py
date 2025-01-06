@@ -13,13 +13,13 @@ from evals import Evals
 # Sample commandlines
 
 # No evals, just train with ag_news dataset:
-# python3 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=-2 --hellaswag-freq=-2 --generate-freq=-2 --checkpoint-freq=-2
+# python3 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=-2 --hellaswag-freq=-2 --generate-freq=-2 --checkpoint-freq=-2 --graph-freq=-2
 
 # torchrun with single GPU and all evals
-# torchrun --standalone --nproc_per_node=1 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=2 --generate-freq=2 --checkpoint-freq=2
+# torchrun --standalone --nproc_per_node=1 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=2 --generate-freq=2 --checkpoint-freq=2 --graph-freq=2
 
 # torchrun with two GPUs and all evals except hellaswag (takes a lot of time)
-# torchrun --standalone --nproc_per_node=2 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=-2 --generate-freq=2 --checkpoint-freq=2
+# torchrun --standalone --nproc_per_node=2 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=-2 --generate-freq=2 --checkpoint-freq=2 --graph-freq=2
 # -----------------------------------------------------------------------------
 
 # run the training loop
@@ -182,7 +182,9 @@ for step in range(current_step, max_steps):
 
     if args.graph_freq > 0 and (step > 0 and step % args.graph_freq == 0) or last_step:
         evals.print_simple_graph(step)
-        evals.print_complex_graph(step)
+        # complex print only works when we evaluate hellaswag
+        if args.hellaswag_freq > 0:
+            evals.print_complex_graph(step)
 
     # generate output from the model if configured (except step 0, which is noise)
     if (args.generate_freq > 0) and ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):
