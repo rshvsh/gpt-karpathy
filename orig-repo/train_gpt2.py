@@ -10,11 +10,6 @@ from lr import get_lr
 from evals import Evals
 
 # -----------------------------------------------------------------------------
-# simple launch:
-# python train_gpt2.py
-# DDP launch for e.g. 8 GPUs:
-# torchrun --standalone --nproc_per_node=8 train_gpt2.py
-#
 # Sample commandlines
 
 # No evals, just train with ag_news dataset:
@@ -25,6 +20,7 @@ from evals import Evals
 
 # torchrun with two GPUs and all evals except hellaswag (takes a lot of time)
 # torchrun --standalone --nproc_per_node=2 train_gpt2.py --dataset=data_ag_news --micro-batch-size=16 --max-steps=100 --warmup-steps=10 --val-loss-freq=2 --hellaswag-freq=-2 --generate-freq=2 --checkpoint-freq=2
+# -----------------------------------------------------------------------------
 
 # run the training loop
 from torch.distributed import init_process_group, destroy_process_group
@@ -84,33 +80,70 @@ val_loader = DataLoaderRandom(process_rank=ddp_rank, ddp_world_size=ddp_world_si
 
 torch.set_float32_matmul_precision('high')
 
-# create model
-gpt_config = GPTConfig(args) # instantiate from the arguments
-gpt_config.vocab_size = args.train_vocab_size # for training, override the gpt vocab size to be a good multiple of 2
-model = GPT(gpt_config)
-# model = GPT.from_pretrained("gpt2") # or init from OpenAI GPT-2
-model.to(device)
-use_compile = False # torch.compile interferes with HellaSwag eval and Generation. TODO fix
-if use_compile:
-    model = torch.compile(model)
-if ddp:
-    model = DDP(model, device_ids=[ddp_local_rank])
-raw_model = model.module if ddp else model # always contains the "raw" unwrapped model
+# create the log directory we will write checkpoints to and log to
+log_dir = args.log_dir
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, f"{args.log_file}")
 
+# get some of the learning rate hyperparameters
 weight_decay = args.weight_decay
 max_lr = args.max_lr
 warmup_steps = args.warmup_steps
 max_steps = args.max_steps # 19,073 steps is ~1 epoch, if data is 10B tokens and batch size 0.5M tokens
 
-# optimize!
-optimizer = raw_model.configure_optimizers(weight_decay=weight_decay, learning_rate=max_lr, device_type=device_type, master_process=master_process)
+# check if we are resuming from a checkpoint
+checkpoint_files = [f for f in os.listdir(log_dir) if f.startswith("model_") and f.endswith(".pt")]
+if len(checkpoint_files) > 0:
+    # found checkpoints, load from the latest
+    checkpoint_files = sorted(checkpoint_files)
+    latest_checkpoint_file = checkpoint_files[-1]
+    checkpoint_path = os.path.join(log_dir, latest_checkpoint_file)
+    print(f"Restarting from checkpoint {checkpoint_path}") if master_process else None
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # load model state
+    model = GPT(checkpoint['config'])
+    model.to(device)
+    model.load_state_dict(checkpoint['model'])
+    # load optimizer state
+    optimizer = model.configure_optimizers(weight_decay=weight_decay, learning_rate=max_lr, device_type=device_type, master_process=master_process)
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    # load step (which will also load learning rate)
+    current_step = checkpoint['step'] + 1
+    # load traning data state
+    train_loader.set(checkpoint['train_loader']) # TODO:~ implement this in DataLoaderRandom
+    if master_process:
+            print(f"Resuming training from step {current_step} with a validation loss of {checkpoint['val_loss']:.4f}")
+else:
+    print("No checkpoints found to resume training, starting from scratch")
+    # create model
+    gpt_config = GPTConfig(args) # instantiate from the arguments
+    gpt_config.vocab_size = args.train_vocab_size # for training, override the gpt vocab size to be a good multiple of 2
+    model = GPT(gpt_config)
+    model.to(device)
+    current_step = 0
+    optimizer = model.configure_optimizers(weight_decay=weight_decay, learning_rate=max_lr, device_type=device_type, master_process=master_process)
+    with open(log_file, "w") as f: # open for writing to clear the file
+        pass
 
-# create the log directory we will write checkpoints to and log to
-log_dir = args.log_dir
-os.makedirs(log_dir, exist_ok=True)
-log_file = os.path.join(log_dir, f"{args.log_file}")
-with open(log_file, "w") as f: # open for writing to clear the file
-    pass
+# NOTE:~ from either of the above branches, we would have loaded the raw_model
+# Now we need to compile it if we are not doing Hellaswag evaluations, AND
+# We need to wrap it in DDP if we are doing DDP
+use_compile = False # doesn't work with Hellaswag evaluation - TODO:~ why?
+if use_compile:
+    model = torch.compile(model)
+if ddp:
+    model = DDP(model, device_ids=[ddp_local_rank])
+
+# The above would have wrapped the model, so now we need to get the raw model  back again
+def unwrap_model(model):
+    # Unwrap DDP
+    if hasattr(model, 'module'):
+        model = model.module
+    # Unwrap torch.compile
+    if hasattr(model, '_orig_mod'):
+        model = model._orig_mod
+    return model
+raw_model = unwrap_model(model)
 
 # setup the evaluations
 evals = Evals(args=args,
@@ -122,21 +155,29 @@ evals = Evals(args=args,
               device=device,
               master_process=master_process,
               ddp=ddp,
-              val_loader=val_loader)
+              val_loader=val_loader,
+              optimizer=optimizer,
+              train_loader=train_loader)
 
-for step in range(max_steps):
+for step in range(current_step, max_steps):
     t0 = time.time()
     last_step = (step == max_steps - 1)
 
-    # once in a while evaluate our validation loss and checkpoint the model
-    if args.val_loss_freq > 0 and (step % args.val_loss_freq == 0 or last_step):
-        evals.checkpoint_and_val_loss(step, last_step)
+    val_loss = 0.0
 
-    # once in a while evaluate hellaswag
+    # evaluate the val loss if configured
+    if args.val_loss_freq > 0 and (step % args.val_loss_freq == 0 or last_step):
+        val_loss = evals.calc_val_loss(step, last_step)
+
+    # checkpoint the model if configured
+    if step > 0 and args.checkpoint_freq > 0 and (step % args.checkpoint_freq == 0 or last_step):
+        evals.checkpoint_model(step, last_step, val_loss)
+
+    # evaluate hellaswag if configured
     if args.hellaswag_freq > 0 and (step % args.hellaswag_freq == 0 or last_step) and (not use_compile):
         evals.hellawag_eval(step)
 
-    # once in a while generate from the model (except step 0, which is noise)
+    # generate output from the model if configured (except step 0, which is noise)
     if (args.generate_freq > 0) and ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):
         evals.generate_text(step)
 

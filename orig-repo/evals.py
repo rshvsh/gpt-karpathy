@@ -6,7 +6,7 @@ from hellaswag import render_example, iterate_examples, get_most_likely_row
 import os
 
 class Evals:
-    def __init__(self, args, model, encoding, process_rank, num_processes, device_type, device, master_process, ddp, val_loader):
+    def __init__(self, args, model, encoding, process_rank, num_processes, device_type, device, master_process, ddp, val_loader, optimizer, train_loader):
         self.args = args
         self.model = model
         self.encoding = encoding
@@ -16,8 +16,10 @@ class Evals:
         self.device = device
         self.master_process = master_process
         self.ddp = ddp
+        self.train_loader = train_loader
         self.val_loader = val_loader
         self.raw_model = self.model.module if self.ddp else self.model # always contains the "raw" unwrapped model
+        self.optimizer = optimizer
         self.log_dir = args.log_dir
         self.log_file = os.path.join(self.log_dir, f"{args.log_file}")
 
@@ -94,7 +96,7 @@ class Evals:
             with open(self.log_file, "a") as f:
                 f.write(f"{step:5d} hella {acc_norm:.4f}\n")
 
-    def checkpoint_and_val_loss(self, step, last_step):
+    def calc_val_loss(self, step, last_step):
         self.model.eval()
         self.val_loader.reset()
         with torch.no_grad():
@@ -118,14 +120,36 @@ class Evals:
             print(f"step {step:5d} | validation loss: {val_loss_accum.item():.4f} calculated in {val_loss_steps} val_loss_steps")
             with open(self.log_file, "a") as f:
                 f.write(f"{step:5d} val {val_loss_accum.item():.4f}\n")
+        return val_loss_accum.item()
 
-        if step > 0 and self.args.checkpoint_freq > 0 and (step % self.args.checkpoint_freq == 0 or last_step):
-            checkpoint_path = os.path.join(self.log_dir, f"model_{step:05d}.pt")
+    def checkpoint_model(self, step, last_step, val_loss_accum):
+        if val_loss_accum == 0.0:
+            # we need the validation loss so that we know where we are in the process
+            val_loss_accum = self.calc_val_loss(step, last_step)
+            if self.master_process:
+                print(f"Calculated validation loss = {val_loss_accum:.6f} for checkpointing")
+
+        if self.master_process:
+            # use a temp path to ensure atomicity of the save operation to the final file name
+            tmp_checkpoint_path = os.path.join(self.log_dir, f"tmp.ptt")
+
+            # we need to know where we are in the dataloader
+            train_loader_checkpoint = {
+                'current_shard_index': self.train_loader.current_shard_index,
+                'current_batch_index': self.train_loader.current_batch_index,
+                'batches': self.train_loader.batches,
+                # 'tokens': self.train_loader.tokens, # we don't need to save the tokens, we can load them
+                # TODO:~ check for any off-by-one errors in the above
+            }
             checkpoint = {
                 'model': self.raw_model.state_dict(),
+                'optimizer': self.optimizer.state_dict(),
                 'config': self.raw_model.config,
                 'step': step,
-                'val_loss': val_loss_accum.item()
+                'val_loss': val_loss_accum,
+                'train_loader': train_loader_checkpoint,        
             }
-            # TODO:~ you might also want to add optimizer.state_dict() and rng seeds etc., if you wanted to more exactly resume training
-            torch.save(checkpoint, checkpoint_path)
+            torch.save(checkpoint, tmp_checkpoint_path)
+            checkpoint_path = os.path.join(self.log_dir, f"model_{step:05d}.pt")
+            os.rename(tmp_checkpoint_path, checkpoint_path)
+

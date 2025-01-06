@@ -41,6 +41,20 @@ class DataLoaderRandom:
         
         self.reset()
 
+    # load the state of the loader from a checkpoint
+    def set(self, loader_checkpoint):
+        # the call sequence would be:
+        # let's say we were stepping through steps 0-99
+        # let's say checkpoint frequence was 20
+        # step index 20 would return 20 % 20 == 0
+        # this means that next_batch() would have been called for step idx 19
+        # based on the logic in next_batch() and recursive calls to reset(), the current_shard_index and current_batch_index should be ready for processing
+        # we should NOT call reset() again, otherwise we will miss this batch/shard
+        self.current_shard_index = loader_checkpoint['current_shard_index']
+        self.current_batch_index = loader_checkpoint['current_batch_index']
+        self.batches = loader_checkpoint['batches']
+        self.tokens = load_tokens(self.shards[self.current_shard_index])
+
     # reset with current_shard_index = 0 means starting a new epoch
     def reset(self, current_shard_index=0):
         self.current_shard_index = current_shard_index # start at shard index zero
