@@ -36,7 +36,7 @@ def parse_args():
     parser.add_argument("--gen-text-len", type=int, default=32, help="The maximum length of the text to be generated")
 
     args = parser.parse_args()
-    return args
+    return args, parser
 
 def pretty_print(args):
     print("\n")
@@ -81,9 +81,27 @@ def pretty_print(args):
     print(f"\tDebug loader messages       {args.debug_loader}")
     print("\n")
 
+def gen_cmd_line(args, parser):
+    command = []
+    # Get the default values
+    defaults = {action.dest: action.default for action in parser._actions}
+    
+    # Compare args with defaults
+    for key, value in vars(args).items():
+        if value != defaults[key]:
+            if isinstance(value, bool):
+                if value:  # Add flag only if True
+                    command.append(f"--{key.replace('_', '-')}")
+            else:
+                command.append(f"--{key.replace('_', '-')}={value}")
+    
+    return " ".join(command)
+
 if __name__ == "__main__":
-    args = parse_args()
+    args, parser = parse_args()
     pretty_print(args)
+    cmd = gen_cmd_line(args, parser)
+    print(f"Non-default command-line arguments:\n{cmd}")
 
     import sys
     sys.exit(0)

@@ -4,7 +4,7 @@ import torch
 import tiktoken
 
 from model import GPT, GPTConfig
-from args import parse_args, pretty_print
+from args import parse_args, pretty_print, gen_cmd_line
 from loaddata import DataLoaderRandom
 from lr import get_lr
 from evals import Evals
@@ -27,8 +27,9 @@ from torch.distributed import init_process_group, destroy_process_group
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
 
-args = parse_args()
+args, parser = parse_args()
 pretty_print(args)
+cmdline = gen_cmd_line(args, parser)
 
 # set up DDP (distributed data parallel).
 # torchrun command sets the env variables RANK, LOCAL_RANK, and WORLD_SIZE
@@ -72,6 +73,7 @@ T = args.sequence_length # 1024 sequence length
 assert grad_accum_batch_size % (B * T * ddp_world_size) == 0, "make sure grad_accum_batch_size is divisible by B * T * ddp_world_size"
 grad_accum_steps = grad_accum_batch_size // (B * T * ddp_world_size)
 if master_process:
+    print(f"Non-default command-line parameters: {cmdline}")
     print(f"Total manually set batch size: {grad_accum_batch_size:_}")
     print(f"=> Calculated gradient accumulation steps: {grad_accum_steps:_}")
 
