@@ -114,11 +114,10 @@ if len(checkpoint_files) > 0:
     # load step (which will also load learning rate)
     current_step = checkpoint['step'] + 1
     # load traning data state
-    train_loader.set(checkpoint['train_loader']) # TODO:~ implement this in DataLoaderRandom
-    if master_process:
-            print(f"Resuming training from step {current_step} with a validation loss of {checkpoint['val_loss']:.4f}")
+    train_loader.set(checkpoint['train_loader'])
+    print(f"Resuming training from step {current_step} with a validation loss of {checkpoint['val_loss']:.4f}") if master_process else None
 else:
-    print("No checkpoints found to resume training, starting from scratch")
+    print("No checkpoints found to resume training, starting from scratch") if master_process else None
     # create model
     gpt_config = GPTConfig(args) # instantiate from the arguments
     gpt_config.vocab_size = args.train_vocab_size # for training, override the gpt vocab size to be a good multiple of 2
@@ -180,6 +179,10 @@ for step in range(current_step, max_steps):
     # evaluate hellaswag if configured
     if args.hellaswag_freq > 0 and (step % args.hellaswag_freq == 0 or last_step) and (not use_compile):
         evals.hellawag_eval(step)
+
+    if args.graph_freq > 0 and (step > 0 and step % args.graph_freq == 0) or last_step:
+        evals.print_simple_graph(step)
+        evals.print_complex_graph(step)
 
     # generate output from the model if configured (except step 0, which is noise)
     if (args.generate_freq > 0) and ((step > 0 and step % args.generate_freq == 0) or last_step) and (not use_compile):

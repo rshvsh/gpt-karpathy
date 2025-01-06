@@ -4,6 +4,8 @@ from torch.nn import functional as F
 import torch.distributed as dist
 from hellaswag import render_example, iterate_examples, get_most_likely_row
 import os
+import numpy as np
+import matplotlib.pyplot as plt
 
 class Evals:
     def __init__(self, args, model, encoding, process_rank, num_processes, device_type, device, master_process, ddp, val_loader, optimizer, train_loader):
@@ -153,3 +155,109 @@ class Evals:
             checkpoint_path = os.path.join(self.log_dir, f"model_{step:05d}.pt")
             os.rename(tmp_checkpoint_path, checkpoint_path)
 
+    def print_simple_graph(self, iter):
+        sz = "124M"
+
+        # # load the log file
+        with open(self.log_file, "r") as f:
+            lines = f.readlines()
+
+        # parse the individual lines, group by stream (train,val,hella)
+        streams = {}
+        for line in lines:
+            step, stream, val = line.strip().split()
+            if stream not in streams:
+                streams[stream] = {}
+            streams[stream][int(step)] = float(val)
+
+        # convert each stream from {step: val} to (steps[], vals[])
+        # so it's easier for plotting
+        streams_xy = {}
+        for k, v in streams.items():
+            # get all (step, val) items, sort them
+            xy = sorted(list(v.items()))
+            # unpack the list of tuples to tuple of lists
+            streams_xy[k] = list(zip(*xy))
+
+        xs, ys = streams_xy["train"] # training loss
+        ys = np.array(ys)
+        plt.plot(xs, ys, label=f'({sz}) train loss')
+        xs, ys = streams_xy["val"] # validation loss
+        plt.plot(xs, ys, label=f'({sz}) val loss')
+        plt.legend()
+        plt.title(f"Loss Graph for {sz}")
+        plt.xlabel("Steps")
+        plt.ylabel("Loss")
+
+        # Save the figure
+        output_file = os.path.join(self.log_dir, f"{self.args.dataset}_simple_loss_graph_{iter:04d}.png")
+        plt.savefig(output_file)
+
+    def print_complex_graph(self, iter):
+        sz = "124M"
+        hella2_baseline = 0.294463
+        hella3_baseline = 0.337
+        loss_baseline = 0.337
+    
+        # load the log file
+        with open(self.log_file, "r") as f:
+            lines = f.readlines()
+
+        # parse the individual lines, group by stream (train,val,hella)
+        streams = {}
+        for line in lines:
+            step, stream, val = line.strip().split()
+            if stream not in streams:
+                streams[stream] = {}
+            streams[stream][int(step)] = float(val)
+
+        # convert each stream from {step: val} to (steps[], vals[])
+        # so it's easier for plotting
+        streams_xy = {}
+        for k, v in streams.items():
+            # get all (step, val) items, sort them
+            xy = sorted(list(v.items()))
+            # unpack the list of tuples to tuple of lists
+            streams_xy[k] = list(zip(*xy))
+
+        # create figure
+        plt.figure(figsize=(16, 6))
+
+        # Panel 1: losses: both train and val
+        plt.subplot(121)
+        xs, ys = streams_xy["train"] # training loss
+        ys = np.array(ys)
+        plt.plot(xs, ys, label=f'nanogpt ({sz}) train loss')
+        print("Min Train Loss:", min(ys))
+        xs, ys = streams_xy["val"] # validation loss
+        plt.plot(xs, ys, label=f'nanogpt ({sz}) val loss')
+        # horizontal line at GPT-2 baseline
+        if loss_baseline is not None:
+            plt.axhline(y=loss_baseline, color='r', linestyle='--', label=f"OpenAI GPT-2 ({sz}) checkpoint val loss")
+        plt.xlabel("steps")
+        plt.ylabel("loss")
+        plt.yscale('log')
+        plt.ylim(top=15.0)
+        plt.legend()
+        plt.title("Loss")
+        print("Min Validation Loss:", min(ys))
+
+        # Panel 2: HellaSwag eval
+        plt.subplot(122)
+        xs, ys = streams_xy["hella"] # HellaSwag eval
+        ys = np.array(ys)
+        plt.plot(xs, ys, label=f"nanogpt ({sz})")
+        # horizontal line at GPT-2 baseline
+        if hella2_baseline:
+            plt.axhline(y=hella2_baseline, color='r', linestyle='--', label=f"OpenAI GPT-2 ({sz}) checkpoint")
+        if hella3_baseline:
+            plt.axhline(y=hella3_baseline, color='g', linestyle='--', label=f"OpenAI GPT-3 ({sz}) checkpoint")
+        plt.xlabel("steps")
+        plt.ylabel("accuracy")
+        plt.legend()
+        plt.title("HellaSwag eval")
+        print("Max Hellaswag eval:", max(ys))
+
+        # Save the figure
+        output_file = os.path.join(self.log_dir, f"{self.args.dataset}_complex_loss_graph_{iter:04d}.png")
+        plt.savefig(output_file)

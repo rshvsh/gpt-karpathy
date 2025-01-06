@@ -26,6 +26,7 @@ def parse_args():
     parser.add_argument("--hellaswag-freq", type=int, default=250, help="How often to evaluate hellaswag")
     parser.add_argument("--generate-freq", type=int, default=250, help="How often to generate text")
     parser.add_argument("--checkpoint-freq", type=int, default=5000, help="How often to checkpoint the model")
+    parser.add_argument("--graph-freq", type=int, default=500, help="How often to create a graph of the val loss")
 
     parser.add_argument("--debug-loader", action='store_true', help="Prints messages with different process rank indices to diagnose loader issues.")
     parser.add_argument("--log-dir", type=str, default="log", help="The log directory")
@@ -71,6 +72,7 @@ def pretty_print(args):
     print(f"\tHellaswag frequency         {args.hellaswag_freq:_}\t\t(<0 to disable)")
     print(f"\tText generation frequency   {args.generate_freq:_}\t\t(<0 to disable)")
     print(f"\tModel checkpoint frequency  {args.checkpoint_freq:_}")
+    print(f"\tModel graph frequency       {args.graph_freq:_}")
 
     print(f"\nThese affect text generation from a provided prompt:")
     print(f"\tThe text prompt             {args.gen_text_prompt}")
