@@ -192,6 +192,7 @@ class Evals:
         # Save the figure
         output_file = os.path.join(self.log_dir, f"{self.args.dataset}_simple_loss_graph_{iter:04d}.png")
         plt.savefig(output_file)
+        plt.close()
 
     def print_complex_graph(self, iter):
         sz = "124M"
@@ -261,3 +262,4 @@ class Evals:
         # Save the figure
         output_file = os.path.join(self.log_dir, f"{self.args.dataset}_complex_loss_graph_{iter:04d}.png")
         plt.savefig(output_file)
+        plt.close()
